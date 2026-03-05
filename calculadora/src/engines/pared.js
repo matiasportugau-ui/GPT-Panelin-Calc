@@ -17,14 +17,15 @@ const PERFIL_U_SKU = {
 const PERFIL_U_LENGTH = 3.0; // each piece is 3m
 
 /**
- * Add an accessory item to the BOM list. Skips if sku is null or cantidad <= 0.
+ * Add an accessory item to the BOM list. Skips if sku is null or cantidad is not a positive finite number.
  * @returns {number} subtotal added
  */
 function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
-  if (!sku || cantidad <= 0) return 0;
+  const qty = Number(cantidad);
+  if (!sku || !Number.isFinite(qty) || qty <= 0) return 0;
   const acc = getAccessoryInfo(sku, lista_precios);
   const precio_unit = acc.precio;
-  const subtotal = Math.round(cantidad * precio_unit * 100) / 100;
+  const subtotal = Math.round(qty * precio_unit * 100) / 100;
   items.push({ sku, descripcion, cantidad, unidad, precio_unit, subtotal });
   return subtotal;
 }
