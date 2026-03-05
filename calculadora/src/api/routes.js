@@ -6,6 +6,7 @@ const { tablaAutoportancia, validarAutoportancia } = require('../engines/autopor
 const { listFamilies } = require('../data/catalog');
 const { generarPDF } = require('../pdf/generator');
 const { getConfig, validateConfig, reloadConfig } = require('../data/config_loader');
+const { generarHTML } = require('./logica_html');
 
 const router = express.Router();
 
@@ -290,6 +291,17 @@ router.post('/api/pdf', async (req, res) => {
 // GET /api/logica/md     → versión Markdown imprimible (para copiar/imprimir)
 // POST /api/logica       → sube config actualizado, recarga en caliente
 // ─────────────────────────────────────────────────────────────────────────────
+
+// GET /api/logica/html   → manual visual estético (HTML autocontenido, listo para imprimir)
+router.get('/api/logica/html', (_req, res) => {
+  try {
+    const html = generarHTML(getConfig());
+    res.set('Content-Type', 'text/html; charset=utf-8');
+    res.send(html);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
 
 router.get('/api/logica', (_req, res) => {
   try {
