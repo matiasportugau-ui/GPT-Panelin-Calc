@@ -1,0 +1,235 @@
+openapi: "3.1.0"
+info:
+  title: Calculadora BMC API
+  description: Motor programático de cálculo para paneles Panelin — BMC Uruguay
+  version: "4.0.0"
+servers:
+  - url: https://calculadora-bmc.vercel.app
+    description: Producción Vercel
+
+paths:
+  /api/cotizar:
+    post:
+      operationId: cotizar
+      summary: Genera una cotización completa con BOM, precios e IVA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CotizarRequest'
+      responses:
+        "200":
+          description: Cotización generada correctamente
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CotizarResponse'
+        "400":
+          description: Parámetros inválidos o faltantes
+
+  /api/pdf:
+    post:
+      operationId: generarPDF
+      summary: Genera un PDF descargable de una cotización
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PDFRequest'
+      responses:
+        "200":
+          description: PDF generado
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+
+  /api/productos:
+    get:
+      operationId: listarProductos
+      summary: Lista el catálogo de familias y espesores disponibles
+      responses:
+        "200":
+          description: Catálogo de productos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductosResponse'
+
+  /api/autoportancia:
+    get:
+      operationId: validarAutoportancia
+      summary: Valida la luz máxima para una familia y espesor
+      parameters:
+        - name: familia
+          in: query
+          schema:
+            type: string
+          example: ISODEC_EPS
+        - name: espesor
+          in: query
+          schema:
+            type: number
+          example: 100
+        - name: luz
+          in: query
+          schema:
+            type: number
+          example: 4.5
+      responses:
+        "200":
+          description: Resultado de validación
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AutoportanciaResponse'
+
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Estado del servicio
+      responses:
+        "200":
+          description: Servicio activo
+
+components:
+  schemas:
+    CotizarRequest:
+      type: object
+      required:
+        - escenario
+        - familia
+        - espesor_mm
+        - ancho_m
+        - largo_m
+      properties:
+        escenario:
+          type: string
+          enum: [solo_techo, solo_fachada, techo_fachada, camara_frigorifica]
+          description: Tipo de obra a cotizar
+        familia:
+          type: string
+          enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOPANEL_EPS, ISOWALL_PIR]
+          description: Familia de panel
+        espesor_mm:
+          type: number
+          description: Espesor del panel en mm
+        ancho_m:
+          type: number
+          description: Ancho del área en metros
+        largo_m:
+          type: number
+          description: Largo del área en metros
+        lista_precios:
+          type: string
+          enum: [venta, web]
+          default: venta
+          description: Lista de precios a aplicar
+        apoyos:
+          type: number
+          default: 0
+          description: Cantidad de apoyos intermedios (solo techo)
+        num_aberturas:
+          type: number
+          default: 0
+          description: Cantidad de aberturas (puertas/ventanas)
+        estructura:
+          type: string
+          enum: [metal, hormigon, mixto]
+          default: metal
+          description: Tipo de estructura de la obra
+
+    CotizarResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        cotizacion:
+          type: object
+          properties:
+            cotizacion_id:
+              type: string
+            fecha:
+              type: string
+            escenario:
+              type: string
+            familia:
+              type: string
+            espesor_mm:
+              type: number
+            secciones:
+              type: array
+              items:
+                type: object
+            resumen:
+              type: object
+              properties:
+                subtotal_sin_iva:
+                  type: number
+                iva_22:
+                  type: number
+                total_con_iva:
+                  type: number
+                moneda:
+                  type: string
+            warnings:
+              type: array
+              items:
+                type: string
+            envio_referencia_usd:
+              type: number
+            nota:
+              type: string
+
+    PDFRequest:
+      type: object
+      required:
+        - cotizacion_data
+      properties:
+        cotizacion_data:
+          type: object
+          description: Objeto cotización retornado por POST /api/cotizar
+        cliente:
+          type: object
+          properties:
+            nombre:
+              type: string
+            celular:
+              type: string
+              description: Formato 09XXXXXXX (Uruguay)
+            direccion:
+              type: string
+
+    ProductosResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        catalogo:
+          type: array
+          items:
+            type: object
+            properties:
+              familia:
+                type: string
+              espesores:
+                type: array
+                items:
+                  type: number
+
+    AutoportanciaResponse:
+      type: object
+      properties:
+        ok:
+          type: boolean
+        valido:
+          type: boolean
+        luz_max:
+          type: number
+        mensaje:
+          type: string
+        tabla:
+          type: object
