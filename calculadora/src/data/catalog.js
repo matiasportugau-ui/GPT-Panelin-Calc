@@ -3,7 +3,17 @@
 const fs = require('fs');
 const path = require('path');
 
-// Parse CSV with basic quoted-field handling
+// --- JSON catalog (primary price source, clean structured data) ---
+const jsonPath = path.join(__dirname, 'catalog_json.json');
+const JSON_CATALOG = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+
+// Build JSON price index by SKU
+const JSON_BY_SKU = {};
+for (const product of JSON_CATALOG.products) {
+  JSON_BY_SKU[product.sku] = product;
+}
+
+// --- CSV catalog (fallback, broader product set) ---
 function parseCSV(text) {
   const lines = text.split('\n');
   if (lines.length < 2) return [];
@@ -47,27 +57,59 @@ function parseNum(val) {
   return isNaN(n) ? null : n;
 }
 
-// Load and index catalog
 const csvPath = path.join(__dirname, 'catalog_real.csv');
 const csvText = fs.readFileSync(csvPath, 'utf8');
 const RAW_ROWS = parseCSV(csvText);
 
-// Index by SKU
-const BY_SKU = {};
+const CSV_BY_SKU = {};
 for (const row of RAW_ROWS) {
   if (!row.sku) continue;
-  BY_SKU[row.sku] = row;
+  CSV_BY_SKU[row.sku] = row;
 }
 
-// ISODEC EPS panels (not in CSV, Wolf API prices)
-const ISODEC_EPS_PANELS = {
-  100: { sku: 'ISDEC100EPS', name: 'ISODEC EPS 100mm', sale_excl_vat: 46.07, web_price_excl_vat: 46.07, au_m: 1.12 },
-  150: { sku: 'ISDEC150EPS', name: 'ISODEC EPS 150mm', sale_excl_vat: 51.50, web_price_excl_vat: 51.50, au_m: 1.12 },
-  200: { sku: 'ISDEC200EPS', name: 'ISODEC EPS 200mm', sale_excl_vat: 57.00, web_price_excl_vat: 57.00, au_m: 1.12 },
-  250: { sku: 'ISDEC250EPS', name: 'ISODEC EPS 250mm', sale_excl_vat: 62.50, web_price_excl_vat: 62.50, au_m: 1.12 },
-};
+// --- Unified price lookup ---
+// Prefers JSON catalog (clean sale_sin_iva / web_sin_iva), falls back to CSV
+function getPrice(sku, lista) {
+  lista = lista || 'venta';
 
-// Panel ancho util by family
+  // 1. Try JSON catalog first
+  const jp = JSON_BY_SKU[sku];
+  if (jp && jp.pricing) {
+    if (lista === 'web' && jp.pricing.web_sin_iva) return jp.pricing.web_sin_iva;
+    if (jp.pricing.sale_sin_iva) return jp.pricing.sale_sin_iva;
+    if (jp.pricing.web_sin_iva) return jp.pricing.web_sin_iva;
+  }
+
+  // 2. Hardcoded prices for fixation items not in JSON catalog
+  const HARDCODED = {
+    'TMOME': { venta: 0.80, web: 1.016 },
+    'ARATRAP': { venta: 0.89, web: 1.13 },
+    'TC100U': { venta: 28.65, web: 36.38 },
+    'RPOP': { venta: 60, web: 73.20 },
+    'REMPOP': { venta: 0.0315, web: 0.0105 },
+    'ANCNO10': { venta: 0.0882, web: 0.0294 },
+  };
+  if (HARDCODED[sku]) {
+    return HARDCODED[sku][lista] || HARDCODED[sku].venta;
+  }
+
+  // 3. Fall back to CSV
+  const row = CSV_BY_SKU[sku];
+  if (row) {
+    if (lista === 'web') {
+      const wp = parseNum(row.web_price_excl_vat);
+      if (wp) return wp;
+    }
+    const sp = parseNum(row.sale_excl_vat);
+    if (sp) return sp;
+    const wp2 = parseNum(row.web_price_excl_vat);
+    if (wp2) return wp2;
+  }
+
+  return 0;
+}
+
+// --- Panel configuration ---
 const PANEL_AU = {
   ISOROOF: 1.10,
   ISODEC: 1.12,
@@ -78,26 +120,23 @@ const PANEL_AU = {
 
 // Panel SKU mapping: family+thickness -> SKU
 const PANEL_SKUS = {
-  // ISOROOF 3G
   'ISOROOF_3G_30': 'IROOF30', 'ISOROOF_3G_40': 'IROOF40', 'ISOROOF_3G_50': 'IROOF50',
   'ISOROOF_3G_80': 'IROOF80', 'ISOROOF_3G_100': 'IROOF100',
-  // ISOROOF FOIL
   'ISOROOF_FOIL_30': 'IAGRO30', 'ISOROOF_FOIL_50': 'IAGRO50',
-  // ISOROOF Plus
   'ISOROOF_PLUS_50': 'IROOF50-PLS', 'ISOROOF_PLUS_80': 'IROOF80-PLS',
-  // ISODEC PIR
   'ISODEC_PIR_50': 'ISD50PIR', 'ISODEC_PIR_80': 'ISD80PIR',
-  // ISOPANEL EPS
+  // ISODEC EPS - uses _1 suffixed SKUs from JSON catalog
+  'ISODEC_EPS_100': 'ISD100EPS_1', 'ISODEC_EPS_150': 'ISD150EPS_1',
+  'ISODEC_EPS_200': 'ISD200EPS_1', 'ISODEC_EPS_250': 'ISD250EPS_1',
   'ISOPANEL_EPS_50': 'ISD50EPS', 'ISOPANEL_EPS_100': 'ISD100EPS',
   'ISOPANEL_EPS_150': 'ISD150EPS', 'ISOPANEL_EPS_200': 'ISD200EPS', 'ISOPANEL_EPS_250': 'ISD250EPS',
-  // ISOWALL PIR
   'ISOWALL_PIR_50': 'IW50', 'ISOWALL_PIR_80': 'IW80', 'ISOWALL_PIR_100': 'IW100',
-  // ISOFRIG PIR
-  'ISOFRIG_PIR_40': 'IF40 ', 'ISOFRIG_PIR_60': 'IF60 - IFSL60',
+  'ISOFRIG_PIR_40': 'IF40', 'ISOFRIG_PIR_60': 'IF60 - IFSL60',
   'ISOFRIG_PIR_80': 'IF80 - IFSL80', 'ISOFRIG_PIR_100': 'IF100 - IFSL100', 'ISOFRIG_PIR_150': 'IF150 - IFSL150',
 };
 
-// Gotero Frontal mapping: family_thickness -> SKU
+// --- Accessory mappings ---
+
 const GOTERO_FRONTAL = {
   'ISOROOF_3G_30': 'GFS30', 'ISOROOF_3G_40': 'GFS30', 'ISOROOF_3G_50': 'GFS50',
   'ISOROOF_3G_80': 'GFS80', 'ISOROOF_3G_100': 'GFS80',
@@ -107,7 +146,6 @@ const GOTERO_FRONTAL = {
   'ISODEC_EPS_100': '6838', 'ISODEC_EPS_150': '6839', 'ISODEC_EPS_200': '6840', 'ISODEC_EPS_250': '6841',
 };
 
-// Gotero Superior mapping
 const GOTERO_SUPERIOR = {
   'ISOROOF_3G_30': 'GFSUP30', 'ISOROOF_3G_40': 'GFSUP40', 'ISOROOF_3G_50': 'GFSUP50',
   'ISOROOF_3G_80': 'GFSUP80', 'ISOROOF_3G_100': 'GFSUP80',
@@ -118,7 +156,6 @@ const GOTERO_SUPERIOR = {
   'ISODEC_EPS_200': 'GSDECAM80', 'ISODEC_EPS_250': 'GSDECAM80',
 };
 
-// Gotero Lateral mapping
 const GOTERO_LATERAL = {
   'ISOROOF_3G_30': 'GL30', 'ISOROOF_3G_40': 'GL40', 'ISOROOF_3G_50': 'GL50',
   'ISOROOF_3G_80': 'GL80', 'ISOROOF_3G_100': 'GL80',
@@ -128,111 +165,100 @@ const GOTERO_LATERAL = {
   'ISODEC_EPS_100': '6842', 'ISODEC_EPS_150': '6843', 'ISODEC_EPS_200': '6844', 'ISODEC_EPS_250': '6845',
 };
 
-// Canalon mapping
 const CANALON = {
   'ISOROOF_3G_30': 'CD30', 'ISOROOF_3G_40': 'CD50', 'ISOROOF_3G_50': 'CD50',
   'ISOROOF_3G_80': 'CD80', 'ISOROOF_3G_100': 'CD80',
   'ISOROOF_FOIL_30': 'CD30', 'ISOROOF_FOIL_50': 'CD50',
   'ISOROOF_PLUS_50': 'CD50', 'ISOROOF_PLUS_80': 'CD80',
-  'ISODEC_PIR_50': 'CAN.ISDC120', 'ISODEC_PIR_80': 'CAN.ISDC120',
+  'ISODEC_PIR_50': 'CAN.ISDC120', 'ISODEC_PIR_80': 'CAN.ISDC120_1',
   'ISODEC_EPS_100': '6801', 'ISODEC_EPS_150': '6802', 'ISODEC_EPS_200': '6803', 'ISODEC_EPS_250': '6804',
 };
 
-// Cumbrera mapping
 const CUMBRERA = {
   ISOROOF_3G: 'CUMROOF3M', ISOROOF_FOIL: 'CUMROOF3M', ISOROOF_PLUS: 'CUMROOF3M',
   ISODEC_PIR: '6847', ISODEC_EPS: '6847',
 };
 
-// Soporte canalon mapping
 const SOPORTE_CANALON = {
   ISOROOF_3G: 'SOPCAN3M', ISOROOF_FOIL: 'SOPCAN3M', ISOROOF_PLUS: 'SOPCAN3M',
   ISODEC_PIR: '6805', ISODEC_EPS: '6805',
 };
 
-// Perfil U mapping by thickness
-const PERFIL_U = {
-  40: 'PU50MM', 50: 'PU50MM', 60: 'PU50MM',
+// Perfil U mapping: family + thickness -> SKU
+// Uses JSON catalog's deduplicated SKUs for proper per-family variants
+const PERFIL_U_MAP = {
+  // ISOFRIG
+  'ISOFRIG_PIR_40': 'PU50MM',      // 40mm x 35mm ISOFRIG
+  'ISOFRIG_PIR_60': 'PU50MM_2',    // 60mm x 35mm ISOFRIG
+  'ISOFRIG_PIR_80': 'PU100MM',
+  'ISOFRIG_PIR_100': 'PU100MM',
+  'ISOFRIG_PIR_150': 'PU150MM',
+  // ISOWALL
+  'ISOWALL_PIR_50': 'PU50MM_1',    // 50mm x 35mm ISOWALL/ISOPANEL
+  'ISOWALL_PIR_80': 'PU50MM_3',    // 80mm x 35mm ISOWALL
+  'ISOWALL_PIR_100': 'PU100MM',
+  // ISOPANEL
+  'ISOPANEL_EPS_50': 'PU50MM_1',   // 50mm x 35mm ISOWALL/ISOPANEL
+  'ISOPANEL_EPS_100': 'PU100MM',
+  'ISOPANEL_EPS_150': 'PU150MM',
+  'ISOPANEL_EPS_200': 'PU200MM',
+  'ISOPANEL_EPS_250': 'PU250MM',
+  // ISODEC EPS (uses same profiles)
+  'ISODEC_EPS_100': 'PU100MM',
+  'ISODEC_EPS_150': 'PU150MM',
+  'ISODEC_EPS_200': 'PU200MM',
+  'ISODEC_EPS_250': 'PU250MM',
+  // ISODEC PIR
+  'ISODEC_PIR_50': 'PU50MM_1',
+  'ISODEC_PIR_80': 'PU100MM',
+};
+
+// Fallback by thickness only
+const PERFIL_U_BY_THICKNESS = {
+  40: 'PU50MM', 50: 'PU50MM_1', 60: 'PU50MM_2',
   80: 'PU100MM', 100: 'PU100MM',
   150: 'PU150MM', 200: 'PU200MM', 250: 'PU250MM',
 };
 
-function getPrice(row, lista) {
-  if (!row) return 0;
-  if (lista === 'web') {
-    const wp = parseNum(row.web_price_excl_vat);
-    if (wp) return wp;
-  }
-  const sp = parseNum(row.sale_excl_vat);
-  if (sp) return sp;
-  const wp2 = parseNum(row.web_price_excl_vat);
-  if (wp2) return wp2;
-  return 0;
-}
+// --- Public API ---
 
 function getPanelByFamilyAndThickness(family, thickness_mm, lista_precios) {
   lista_precios = lista_precios || 'venta';
 
-  // ISODEC EPS special case
-  if (family === 'ISODEC_EPS') {
-    const d = ISODEC_EPS_PANELS[thickness_mm];
-    if (!d) throw new Error(`Espesor ${thickness_mm}mm no disponible para ${family}`);
-    return {
-      sku: d.sku,
-      name: d.name,
-      precio_m2: lista_precios === 'web' ? d.web_price_excl_vat : d.sale_excl_vat,
-      au_m: d.au_m,
-    };
-  }
-
   const key = `${family}_${thickness_mm}`;
   const sku = PANEL_SKUS[key];
   if (!sku) throw new Error(`Panel no encontrado: ${family} ${thickness_mm}mm`);
-  const row = BY_SKU[sku];
-  if (!row) throw new Error(`SKU ${sku} no encontrado en catálogo`);
+
+  // Get name from JSON or CSV
+  const jp = JSON_BY_SKU[sku];
+  const cp = CSV_BY_SKU[sku];
+  const name = (jp && jp.name) || (cp && cp.name) || `${family} ${thickness_mm}mm`;
 
   const baseFamily = family.split('_')[0];
   return {
     sku,
-    name: row.name,
-    precio_m2: getPrice(row, lista_precios),
+    name,
+    precio_m2: getPrice(sku, lista_precios),
     au_m: PANEL_AU[baseFamily] || 1.0,
   };
 }
 
 function getAccessoryBySKU(sku, lista_precios) {
   lista_precios = lista_precios || 'venta';
-  const row = BY_SKU[sku];
-  if (!row) throw new Error(`Accesorio no encontrado: ${sku}`);
+  const jp = JSON_BY_SKU[sku];
+  const cp = CSV_BY_SKU[sku];
+  if (!jp && !cp) throw new Error(`Accesorio no encontrado: ${sku}`);
   return {
     sku,
-    name: row.name,
-    precio: getPrice(row, lista_precios),
-    length_m: parseNum(row.length_m),
-    unit: row.unit_base || 'unit',
+    name: (jp && jp.name) || (cp && cp.name) || sku,
+    precio: getPrice(sku, lista_precios),
+    length_m: jp ? parseNum(jp.specifications && jp.specifications.length_m) : (cp ? parseNum(cp.length_m) : null),
+    unit: (jp && jp.specifications && jp.specifications.unit_base) || (cp && cp.unit_base) || 'unit',
   };
 }
 
 function getAccessoryPrice(sku, lista_precios) {
-  lista_precios = lista_precios || 'venta';
-
-  // Special hardcoded prices for items without prices in CSV
-  const HARDCODED = {
-    'TMOME': { venta: 0.80, web: 1.016 },
-    'ARATRAP': { venta: 0.89, web: 1.13 },
-    'TC100U': { venta: 28.65, web: 36.38 },
-    'RPOP': { venta: 60, web: 73.20 },
-    'REMPOP': { venta: 0.0315, web: 0.0105 },
-    'ANCNO10': { venta: 0.0882, web: 0.0294 },
-  };
-
-  if (HARDCODED[sku]) {
-    return HARDCODED[sku][lista_precios] || HARDCODED[sku].venta;
-  }
-
-  const row = BY_SKU[sku];
-  if (!row) throw new Error(`Accesorio no encontrado: ${sku}`);
-  return getPrice(row, lista_precios);
+  return getPrice(sku, lista_precios || 'venta');
 }
 
 function resolveGoteroFrontal(family, thickness_mm) {
@@ -259,8 +285,9 @@ function resolveSoporteCanalon(family) {
   return SOPORTE_CANALON[family] || null;
 }
 
-function resolvePerfilU(thickness_mm) {
-  return PERFIL_U[thickness_mm] || PERFIL_U[100];
+function resolvePerfilU(family, thickness_mm) {
+  const key = `${family}_${thickness_mm}`;
+  return PERFIL_U_MAP[key] || PERFIL_U_BY_THICKNESS[thickness_mm] || 'PU100MM';
 }
 
 function listFamilies() {
@@ -272,9 +299,6 @@ function listFamilies() {
     if (!families[family]) families[family] = [];
     families[family].push(thickness);
   }
-  // Add ISODEC_EPS
-  families['ISODEC_EPS'] = [100, 150, 200, 250];
-  // Sort thicknesses
   for (const f of Object.keys(families)) {
     families[f].sort((a, b) => a - b);
   }
@@ -298,6 +322,7 @@ module.exports = {
   resolvePerfilU,
   listFamilies,
   ivaRate,
-  BY_SKU,
+  JSON_BY_SKU,
+  CSV_BY_SKU,
   RAW_ROWS,
 };

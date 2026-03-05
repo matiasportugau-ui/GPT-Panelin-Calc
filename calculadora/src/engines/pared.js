@@ -57,7 +57,7 @@ function calcParedCompleto({
   subtotal += costo_paneles;
 
   // 2. Perfil U (solera superior + inferior): 2 x ceil(ancho_m / 3) piezas
-  const puSku = resolvePerfilU(espesor_mm);
+  const puSku = resolvePerfilU(familia, espesor_mm);
   if (puSku) {
     const cantPU = 2 * Math.ceil(ancho_m / 3);
     const precioPU = getAccessoryPrice(puSku, lista_precios);

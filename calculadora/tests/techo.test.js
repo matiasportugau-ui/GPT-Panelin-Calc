@@ -31,7 +31,7 @@ describe('calcTechoCompleto — ISODEC EPS 100mm 5x11m', () => {
 
   test('items tienen SKUs reales del catalogo', () => {
     const skus = result.items.map(i => i.sku);
-    expect(skus).toContain('ISDEC100EPS');
+    expect(skus).toContain('ISD100EPS_1');
     expect(skus).toContain('6838');   // Gotero Frontal ISODEC 100mm
     expect(skus).toContain('6842');   // Gotero Lateral ISODEC 100mm
     expect(skus).toContain('GSDECAM50'); // Gotero Superior
