@@ -1,4 +1,4 @@
-# Migración desde v3 — Repos Separados a v4.0
+# Migración desde v3 — Repos Separados a v5.0
 
 ## Contexto: Problema Original
 
@@ -11,7 +11,7 @@ Los dos repositorios originales se bloqueaban entre sí:
 | **BOM** | bom_rules.json + IA | Engines programáticos |
 | **PDF** | reportlab + Code Interpreter | jsPDF en browser |
 
-## Cambios en v4.0
+## Cambios en v5.0
 
 ### GPT: Instrucciones simplificadas
 **Eliminado:**
@@ -25,7 +25,7 @@ Los dos repositorios originales se bloqueaban entre sí:
 - Sección "CALCULADORA API" con flujo claro
 - Regla: NUNCA calcular por cuenta propia
 - Regla IVA unificada: "SIN IVA en unitarios, 22% al total"
-- GPT Action apuntando a `https://calculadora-bmc.vercel.app`
+- GPT Action apuntando a `https://calculadora-five-sand.vercel.app`
 
 ### Calculadora: Extraída a API independiente
 
@@ -34,11 +34,11 @@ Los dos repositorios originales se bloqueaban entre sí:
 - Precios hardcoded en JSX
 - PDF solo en browser
 
-**Después (v4.0):** Express API en `calculadora/`
+**Después (v5.0):** Express API en `calculadora/`
 - Engines como módulos Node.js reutilizables
-- Precios en `src/data/precios.json` (fuente única)
+- Precios y SKUs en `src/data/catalog_real.csv` indexado por `catalog.js`
 - PDF generado en servidor
-- Tests unitarios e integración
+- 41 tests unitarios e integración
 
 ## Guía de Migración
 
@@ -58,5 +58,5 @@ Ver `docs/DEPLOYMENT.md` para instrucciones de deploy en Vercel.
 
 - `PanelinCalculadoraV3.jsx` → **intacto**, mismo comportamiento
 - GPT → simplificado, misma personalidad y flujo de conversación
-- Precios → mismos valores, ahora centralizados
+- Precios → mismos valores, ahora centralizados en `catalog_real.csv`
 - IVA → unificado en 22% SIN incluir en unitarios (antes era ambiguo)

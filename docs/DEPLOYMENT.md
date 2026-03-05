@@ -1,4 +1,4 @@
-# Guía de Deploy — GPT Panelin v4.0
+# Guía de Deploy — GPT Panelin v5.0
 
 ## 1. Calculadora API en Vercel
 
@@ -16,7 +16,7 @@ vercel --prod
 ```
 
 Vercel detectará automáticamente `vercel.json` y desplegará la API.
-La URL de producción será algo como: `https://calculadora-bmc.vercel.app`
+La URL de producción será algo como: `https://calculadora-five-sand.vercel.app`
 
 ### Variables de entorno (opcional)
 ```
@@ -25,10 +25,10 @@ PORT=3000  # Solo para desarrollo local
 
 ### Verificación
 ```bash
-curl https://calculadora-bmc.vercel.app/health
-# { "status": "ok", "service": "calculadora-bmc", "version": "4.0.0" }
+curl https://calculadora-five-sand.vercel.app/health
+# { "status": "ok", "service": "calculadora-bmc", "version": "5.0.0" }
 
-curl -X POST https://calculadora-bmc.vercel.app/api/cotizar \
+curl -X POST https://calculadora-five-sand.vercel.app/api/cotizar \
   -H "Content-Type: application/json" \
   -d '{"escenario":"solo_techo","familia":"ISODEC_EPS","espesor_mm":100,"ancho_m":5,"largo_m":11}'
 ```
@@ -48,7 +48,7 @@ curl -X POST https://calculadora-bmc.vercel.app/api/cotizar \
 En `gpt/gpt_action_schema.yaml`, reemplazar:
 ```yaml
 servers:
-  - url: https://calculadora-bmc.vercel.app  # ← Tu URL de Vercel
+  - url: https://calculadora-five-sand.vercel.app  # ← Tu URL de Vercel
 ```
 
 ## 3. Desarrollo Local
@@ -83,5 +83,5 @@ docker run -p 3000:3000 calculadora-bmc
 ## 5. Health Check Endpoint
 
 ```
-GET /health → { "status": "ok", "service": "calculadora-bmc", "version": "4.0.0" }
+GET /health → { "status": "ok", "service": "calculadora-bmc", "version": "5.0.0" }
 ```
