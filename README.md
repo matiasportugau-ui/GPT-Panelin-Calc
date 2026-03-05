@@ -98,6 +98,7 @@ Ver `docs/DEPLOYMENT.md` para instrucciones de configuración del GPT Action.
 
 ## Documentación
 
+- [**Pasos a seguir (setup completo)**](docs/NEXT_STEPS.md)
 - [Integración completa](docs/INTEGRATION.md)
 - [Arquitectura v4.0](docs/ARCHITECTURE.md)
 - [Migración desde v3](docs/MIGRATION_FROM_V3.md)
