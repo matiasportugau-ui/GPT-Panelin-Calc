@@ -22,7 +22,7 @@ function cacheCotizacion(cotizacion) {
 
 // GET /health
 router.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'calculadora-bmc', version: '4.1.0' });
+  res.json({ status: 'ok', service: 'calculadora-bmc', version: '5.0.0' });
 });
 
 // GET /api/productos
@@ -55,7 +55,8 @@ router.post('/api/cotizar', (req, res) => {
   try {
     const {
       escenario, familia, espesor_mm, ancho_m, largo_m,
-      lista_precios, apoyos, num_aberturas, estructura,
+      cant_paneles, lista_precios, apoyos, num_aberturas, estructura,
+      tiene_cumbrera, tiene_canalon, envio_usd,
     } = req.body;
 
     if (!escenario) return res.status(400).json({ ok: false, error: 'Campo requerido: escenario' });
@@ -63,25 +64,38 @@ router.post('/api/cotizar', (req, res) => {
     if (espesor_mm === undefined || espesor_mm === null || espesor_mm === '') {
       return res.status(400).json({ ok: false, error: 'Campo requerido: espesor_mm' });
     }
-    if (ancho_m === undefined || ancho_m === null || ancho_m === '') {
-      return res.status(400).json({ ok: false, error: 'Campo requerido: ancho_m' });
+    if ((ancho_m === undefined || ancho_m === null || ancho_m === '') &&
+        (cant_paneles === undefined || cant_paneles === null || cant_paneles === '')) {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: ancho_m o cant_paneles' });
     }
     if (largo_m === undefined || largo_m === null || largo_m === '') {
       return res.status(400).json({ ok: false, error: 'Campo requerido: largo_m' });
     }
 
     const espesorNum = Number(espesor_mm);
-    const anchoNum = Number(ancho_m);
     const largoNum = Number(largo_m);
 
     if (!Number.isFinite(espesorNum) || espesorNum <= 0) {
       return res.status(400).json({ ok: false, error: 'espesor_mm debe ser un numero finito > 0' });
     }
-    if (!Number.isFinite(anchoNum) || anchoNum <= 0) {
-      return res.status(400).json({ ok: false, error: 'ancho_m debe ser un numero finito > 0' });
-    }
     if (!Number.isFinite(largoNum) || largoNum <= 0) {
       return res.status(400).json({ ok: false, error: 'largo_m debe ser un numero finito > 0' });
+    }
+
+    let anchoNum = null;
+    if (ancho_m !== undefined && ancho_m !== null && ancho_m !== '') {
+      anchoNum = Number(ancho_m);
+      if (!Number.isFinite(anchoNum) || anchoNum <= 0) {
+        return res.status(400).json({ ok: false, error: 'ancho_m debe ser un numero finito > 0' });
+      }
+    }
+
+    let cantPanelesNum = null;
+    if (cant_paneles !== undefined && cant_paneles !== null && cant_paneles !== '') {
+      cantPanelesNum = Number(cant_paneles);
+      if (!Number.isFinite(cantPanelesNum) || cantPanelesNum <= 0) {
+        return res.status(400).json({ ok: false, error: 'cant_paneles debe ser un numero finito > 0' });
+      }
     }
 
     let apoyosNum = 0;
@@ -108,10 +122,17 @@ router.post('/api/cotizar', (req, res) => {
 
     const cotizacion = generarCotizacion({
       escenario, familia,
-      espesor_mm: espesorNum, ancho_m: anchoNum, largo_m: largoNum,
+      espesor_mm: espesorNum,
+      ancho_m: anchoNum,
+      largo_m: largoNum,
+      cant_paneles: cantPanelesNum,
       lista_precios: listaPreciosNormalizada,
-      apoyos: apoyosNum, num_aberturas: aberturasNum,
+      apoyos: apoyosNum,
+      num_aberturas: aberturasNum,
       estructura: estructura || 'metal',
+      tiene_cumbrera: tiene_cumbrera === true || tiene_cumbrera === 'true',
+      tiene_canalon: tiene_canalon !== false && tiene_canalon !== 'false',
+      envio_usd: envio_usd !== undefined && envio_usd !== null ? Number(envio_usd) : undefined,
     });
 
     cacheCotizacion(cotizacion);
@@ -123,10 +144,6 @@ router.post('/api/cotizar', (req, res) => {
 });
 
 // POST /api/pdf
-// Accepts EITHER:
-//   1. { cotizacion_data, cliente } - full cotizacion object
-//   2. { cotizacion_id, cliente } - looks up from cache
-//   3. { escenario, familia, espesor_mm, ancho_m, largo_m, ..., cliente } - generates then PDF
 router.post('/api/pdf', async (req, res) => {
   try {
     let cotizacion = null;
@@ -146,17 +163,21 @@ router.post('/api/pdf', async (req, res) => {
         escenario: req.body.escenario,
         familia: req.body.familia,
         espesor_mm: Number(req.body.espesor_mm),
-        ancho_m: Number(req.body.ancho_m),
+        ancho_m: req.body.ancho_m ? Number(req.body.ancho_m) : null,
         largo_m: Number(req.body.largo_m),
+        cant_paneles: req.body.cant_paneles ? Number(req.body.cant_paneles) : null,
         lista_precios: req.body.lista_precios || 'venta',
         apoyos: Number(req.body.apoyos || 0),
         num_aberturas: Number(req.body.num_aberturas || 0),
         estructura: req.body.estructura || 'metal',
+        tiene_cumbrera: req.body.tiene_cumbrera === true || req.body.tiene_cumbrera === 'true',
+        tiene_canalon: req.body.tiene_canalon !== false && req.body.tiene_canalon !== 'false',
+        envio_usd: req.body.envio_usd !== undefined ? Number(req.body.envio_usd) : undefined,
       });
       cacheCotizacion(cotizacion);
     }
     else {
-      return res.status(400).json({ ok: false, error: 'Envia cotizacion_id, cotizacion_data, o los parametros de cotizacion (escenario, familia, espesor_mm, ancho_m, largo_m).' });
+      return res.status(400).json({ ok: false, error: 'Envia cotizacion_id, cotizacion_data, o los parametros de cotizacion (escenario, familia, espesor_mm, ancho_m/cant_paneles, largo_m).' });
     }
 
     const pdfBuffer = await generarPDF(cotizacion, cliente);
