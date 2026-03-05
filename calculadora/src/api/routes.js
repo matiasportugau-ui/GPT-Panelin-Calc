@@ -33,109 +33,6 @@ function parseBool(val) {
   return Boolean(val);
 }
 
-/**
- * Validates and coerces cotizacion parameters from a raw request body (or any plain object).
- * Returns { params } on success or { error } (string) on validation failure.
- */
-function parseCotizacionParams(data) {
-  const {
-    escenario, familia, espesor_mm, ancho_m, cant_paneles, largo_m,
-    lista_precios, apoyos, num_aberturas, estructura,
-    tiene_cumbrera, tiene_canalon, envio_usd,
-  } = data;
-
-  if (!escenario) return { error: 'Campo requerido: escenario' };
-  if (!familia) return { error: 'Campo requerido: familia' };
-  if (espesor_mm === undefined || espesor_mm === null || espesor_mm === '') {
-    return { error: 'Campo requerido: espesor_mm' };
-  }
-  if (largo_m === undefined || largo_m === null || largo_m === '') {
-    return { error: 'Campo requerido: largo_m' };
-  }
-
-  const espesorNum = Number(espesor_mm);
-  const largoNum = Number(largo_m);
-
-  if (!Number.isFinite(espesorNum) || espesorNum <= 0) {
-    return { error: 'espesor_mm debe ser un numero finito > 0' };
-  }
-  if (!Number.isFinite(largoNum) || largoNum <= 0) {
-    return { error: 'largo_m debe ser un numero finito > 0' };
-  }
-
-  let anchoNum = null;
-  let cantPanelesNum = null;
-
-  if (cant_paneles !== undefined && cant_paneles !== null && cant_paneles !== '') {
-    cantPanelesNum = Number(cant_paneles);
-    if (!Number.isFinite(cantPanelesNum) || cantPanelesNum <= 0) {
-      return { error: 'cant_paneles debe ser un numero finito > 0' };
-    }
-  }
-
-  if (ancho_m !== undefined && ancho_m !== null && ancho_m !== '') {
-    anchoNum = Number(ancho_m);
-    if (!Number.isFinite(anchoNum) || anchoNum <= 0) {
-      return { error: 'ancho_m debe ser un numero finito > 0' };
-    }
-  }
-
-  // Reject ambiguous requests that send both ancho_m and cant_paneles
-  if (anchoNum !== null && cantPanelesNum !== null) {
-    return { error: 'No se pueden enviar simultaneamente ancho_m y cant_paneles; use solo uno de los dos' };
-  }
-
-  if (anchoNum === null && cantPanelesNum === null) {
-    return { error: 'Se requiere ancho_m o cant_paneles' };
-  }
-
-  let apoyosNum = 0;
-  if (apoyos !== undefined && apoyos !== null && apoyos !== '') {
-    apoyosNum = Number(apoyos);
-    if (!Number.isFinite(apoyosNum) || apoyosNum < 0) {
-      return { error: 'apoyos debe ser un numero finito >= 0' };
-    }
-  }
-
-  let aberturasNum = 0;
-  if (num_aberturas !== undefined && num_aberturas !== null && num_aberturas !== '') {
-    aberturasNum = Number(num_aberturas);
-    if (!Number.isFinite(aberturasNum) || aberturasNum < 0) {
-      return { error: 'num_aberturas debe ser un numero finito >= 0' };
-    }
-  }
-
-  const listaPreciosNormalizada = lista_precios || 'venta';
-  if (!['venta', 'web'].includes(listaPreciosNormalizada)) {
-    return { error: 'lista_precios invalida. Valores permitidos: venta, web' };
-  }
-
-  let envioNum;
-  if (envio_usd !== undefined && envio_usd !== null && envio_usd !== '') {
-    envioNum = Number(envio_usd);
-    if (!Number.isFinite(envioNum) || envioNum < 0) {
-      return { error: 'envio_usd debe ser un numero finito >= 0' };
-    }
-  }
-
-  return {
-    params: {
-      escenario, familia,
-      espesor_mm: espesorNum,
-      ancho_m: anchoNum,
-      cant_paneles: cantPanelesNum,
-      largo_m: largoNum,
-      lista_precios: listaPreciosNormalizada,
-      apoyos: apoyosNum,
-      num_aberturas: aberturasNum,
-      estructura: estructura || 'metal',
-      tiene_cumbrera: parseBool(tiene_cumbrera),
-      tiene_canalon: parseBool(tiene_canalon),
-      envio_usd: envioNum,
-    },
-  };
-}
-
 // GET /health
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'calculadora-bmc', version: '5.0.0' });
@@ -169,8 +66,101 @@ router.get('/api/autoportancia', (req, res) => {
 // POST /api/cotizar
 router.post('/api/cotizar', (req, res) => {
   try {
-    const parsed = parseCotizacionParams(req.body);
-    if (parsed.error) return res.status(400).json({ ok: false, error: parsed.error });
+    const {
+      escenario, familia, espesor_mm, ancho_m, cant_paneles, largo_m,
+      lista_precios, apoyos, num_aberturas, estructura,
+      tiene_cumbrera, tiene_canalon, envio_usd,
+    } = req.body;
+
+    if (!escenario) return res.status(400).json({ ok: false, error: 'Campo requerido: escenario' });
+    if (!familia) return res.status(400).json({ ok: false, error: 'Campo requerido: familia' });
+    if (espesor_mm === undefined || espesor_mm === null || espesor_mm === '') {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: espesor_mm' });
+    }
+    if (largo_m === undefined || largo_m === null || largo_m === '') {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: largo_m' });
+    }
+
+    const espesorNum = Number(espesor_mm);
+    const largoNum = Number(largo_m);
+
+    if (!Number.isFinite(espesorNum) || espesorNum <= 0) {
+      return res.status(400).json({ ok: false, error: 'espesor_mm debe ser un numero finito > 0' });
+    }
+    if (!Number.isFinite(largoNum) || largoNum <= 0) {
+      return res.status(400).json({ ok: false, error: 'largo_m debe ser un numero finito > 0' });
+    }
+
+    // Require either ancho_m or cant_paneles
+    let anchoNum = null;
+    let cantPanelesNum = null;
+
+    if (cant_paneles !== undefined && cant_paneles !== null && cant_paneles !== '') {
+      cantPanelesNum = Number(cant_paneles);
+      if (!Number.isFinite(cantPanelesNum) || cantPanelesNum <= 0) {
+        return res.status(400).json({ ok: false, error: 'cant_paneles debe ser un numero finito > 0' });
+      }
+    }
+
+    if (ancho_m !== undefined && ancho_m !== null && ancho_m !== '') {
+      anchoNum = Number(ancho_m);
+      if (!Number.isFinite(anchoNum) || anchoNum <= 0) {
+        return res.status(400).json({ ok: false, error: 'ancho_m debe ser un numero finito > 0' });
+      }
+    }
+
+    // Reject ambiguous requests that send both ancho_m and cant_paneles
+    if (anchoNum !== null && cantPanelesNum !== null) {
+      return res.status(400).json({ ok: false, error: 'No se pueden enviar simultaneamente ancho_m y cant_paneles; use solo uno de los dos' });
+    }
+
+    if (anchoNum === null && cantPanelesNum === null) {
+      return res.status(400).json({ ok: false, error: 'Se requiere ancho_m o cant_paneles' });
+    }
+
+    let apoyosNum = 0;
+    if (apoyos !== undefined && apoyos !== null && apoyos !== '') {
+      apoyosNum = Number(apoyos);
+      if (!Number.isFinite(apoyosNum) || apoyosNum < 0) {
+        return res.status(400).json({ ok: false, error: 'apoyos debe ser un numero finito >= 0' });
+      }
+    }
+
+    let aberturasNum = 0;
+    if (num_aberturas !== undefined && num_aberturas !== null && num_aberturas !== '') {
+      aberturasNum = Number(num_aberturas);
+      if (!Number.isFinite(aberturasNum) || aberturasNum < 0) {
+        return res.status(400).json({ ok: false, error: 'num_aberturas debe ser un numero finito >= 0' });
+      }
+    }
+
+    const listaPreciosNormalizada = lista_precios || 'venta';
+    if (!['venta', 'web'].includes(listaPreciosNormalizada)) {
+      return res.status(400).json({ ok: false, error: 'lista_precios invalida. Valores permitidos: venta, web' });
+    }
+
+    let envioNum;
+    if (envio_usd !== undefined && envio_usd !== null && envio_usd !== '') {
+      envioNum = Number(envio_usd);
+      if (!Number.isFinite(envioNum) || envioNum < 0) {
+        return res.status(400).json({ ok: false, error: 'envio_usd debe ser un numero finito >= 0' });
+      }
+    }
+
+    const cotizacion = generarCotizacion({
+      escenario, familia,
+      espesor_mm: espesorNum,
+      ancho_m: anchoNum,
+      cant_paneles: cantPanelesNum,
+      largo_m: largoNum,
+      lista_precios: listaPreciosNormalizada,
+      apoyos: apoyosNum,
+      num_aberturas: aberturasNum,
+      estructura: estructura || 'metal',
+      tiene_cumbrera: parseBool(tiene_cumbrera),
+      tiene_canalon: parseBool(tiene_canalon),
+      envio_usd: envioNum,
+    });
 
     const cotizacion = generarCotizacion(parsed.params);
     cacheCotizacion(cotizacion);
@@ -201,9 +191,22 @@ router.post('/api/pdf', async (req, res) => {
         });
       }
     } else if (req.body.escenario && req.body.familia) {
-      const parsed = parseCotizacionParams(req.body);
-      if (parsed.error) return res.status(400).json({ ok: false, error: parsed.error });
-      cotizacion = generarCotizacion(parsed.params);
+      const b = req.body;
+      cotizacion = generarCotizacion({
+        escenario: b.escenario,
+        familia: b.familia,
+        espesor_mm: Number(b.espesor_mm),
+        ancho_m: b.ancho_m != null ? Number(b.ancho_m) : null,
+        cant_paneles: b.cant_paneles != null ? Number(b.cant_paneles) : null,
+        largo_m: Number(b.largo_m),
+        lista_precios: b.lista_precios || 'venta',
+        apoyos: Number(b.apoyos || 0),
+        num_aberturas: Number(b.num_aberturas || 0),
+        estructura: b.estructura || 'metal',
+        tiene_cumbrera: parseBool(b.tiene_cumbrera),
+        tiene_canalon: parseBool(b.tiene_canalon),
+        envio_usd: b.envio_usd != null ? Number(b.envio_usd) : undefined,
+      });
       cacheCotizacion(cotizacion);
     } else {
       return res.status(400).json({
