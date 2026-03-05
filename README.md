@@ -3,7 +3,7 @@
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
 ![React](https://img.shields.io/badge/React-18%2B-blue)
 ![License](https://img.shields.io/badge/License-No%20especificada-lightgrey)
-![Tests](https://img.shields.io/badge/Tests-24%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-29%20passing-brightgreen)
 
 Monorepo que unifica **GPT Panelin** (cerebro conversacional) con **Calculadora BMC** (motor programático de cálculo) para paneles sándwich Panelin — BMC Uruguay.
 
