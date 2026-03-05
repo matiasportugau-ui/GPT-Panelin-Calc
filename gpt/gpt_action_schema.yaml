@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
   title: Calculadora BMC API
-  description: Motor programático de cálculo para paneles Panelin — BMC Uruguay. Fuente única de verdad para precios, BOM, autoportancia y PDF.
-  version: "4.1.1"
+  description: Motor programático de cálculo para paneles Panelin — BMC Uruguay. Fuente única de verdad para precios, BOM con SKUs reales del catálogo, autoportancia y PDF.
+  version: "5.0.0"
 servers:
   - url: "https://calculadora-five-sand.vercel.app"
     description: Producción
@@ -11,7 +11,7 @@ paths:
   /api/cotizar:
     post:
       operationId: cotizar
-      summary: Genera una cotización completa con BOM detallado, precios, IVA 22% y warnings de autoportancia
+      summary: Genera una cotización completa con BOM detallado (SKUs reales del catálogo), precios, IVA 22% y warnings de autoportancia
       requestBody:
         required: true
         content:
@@ -105,8 +105,8 @@ components:
         - escenario
         - familia
         - espesor_mm
-        - ancho_m
         - largo_m
+      description: "Se requiere ancho_m o cant_paneles (no ambos son obligatorios simultáneamente). Si el cliente dice 'X paneles de Y metros', usar cant_paneles + largo_m."
       properties:
         escenario:
           type: string
@@ -114,22 +114,25 @@ components:
           description: "solo_techo: cubierta. solo_fachada: paredes. techo_fachada: ambos (misma familia). camara_frigorifica: techo + 4 paredes (altura fija 3m)."
         familia:
           type: string
-          enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOPANEL_EPS, ISOWALL_PIR]
-          description: Familia de panel. Consultar GET /api/productos para ver espesores disponibles por familia.
+          enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOROOF_FOIL, ISOROOF_PLUS, ISOPANEL_EPS, ISOWALL_PIR, ISOFRIG_PIR]
+          description: "Familia de panel. Consultar GET /api/productos para espesores disponibles. Normalizar nombres del cliente: Isodeck/Iso Dec/Isodec → ISODEC_EPS o ISODEC_PIR, Isopannel/Isopanel → ISOPANEL_EPS, Isoroof/Iso Roof → ISOROOF_3G, Isowall → ISOWALL_PIR."
         espesor_mm:
           type: number
-          description: Espesor del panel en mm. Debe existir en la familia seleccionada.
+          description: "Espesor del panel en mm. Debe existir en la familia seleccionada. Si el cliente no especifica espesor, cotizar el más común de la familia + la opción siguiente."
         ancho_m:
           type: number
-          description: Ancho del área en metros
+          description: "Ancho del área en metros. Alternativo a cant_paneles. Uno de los dos es obligatorio."
+        cant_paneles:
+          type: number
+          description: "Cantidad de paneles. Alternativo a ancho_m. Usar cuando el cliente dice 'X paneles de Y metros' o 'X paños de Y m'. Uno de los dos es obligatorio."
         largo_m:
           type: number
-          description: Largo del área en metros
+          description: Largo del área (o altura para paredes) en metros.
         lista_precios:
           type: string
           enum: [venta, web]
           default: venta
-          description: "venta: precio distribuidor. web: precio publicado en bmcuruguay.com.uy"
+          description: "venta: precio distribuidor (default). web: precio publicado en bmcuruguay.com.uy"
         apoyos:
           type: number
           default: 0
@@ -142,7 +145,18 @@ components:
           type: string
           enum: [metal, hormigon, mixto]
           default: metal
-          description: Tipo de estructura. Afecta tornillería en fachada (5.5 T2/m² para metal/mixto).
+          description: Tipo de estructura. Afecta tornillería en fachada (5.5 T/m² para metal/mixto).
+        tiene_cumbrera:
+          type: boolean
+          default: false
+          description: "true si el techo tiene 2 aguas (cumbrera central). Preguntar al cliente antes de cotizar techo."
+        tiene_canalon:
+          type: boolean
+          default: false
+          description: "true si se requiere canalón en el borde inferior del techo. Preguntar al cliente antes de cotizar techo."
+        envio_usd:
+          type: number
+          description: "Costo de envío en USD. Solo incluido en la respuesta si se proporciona. El envío NO tiene valor por defecto — si el cliente pregunta por flete, pedirle dirección de obra y cotizar aparte."
 
     CotizarResponse:
       type: object
@@ -167,17 +181,25 @@ components:
               type: string
             secciones:
               type: array
-              description: "Cada sección tiene: tipo (techo|pared|pared_frontal_posterior|pared_lateral), items[], subtotal"
+              description: "Cada sección tiene: tipo (techo|pared|pared_frontal_posterior|pared_lateral), items[] con SKUs reales, subtotal"
               items:
                 type: object
                 properties:
                   tipo:
                     type: string
+                  cant_paneles:
+                    type: number
+                  area_m2:
+                    type: number
                   items:
                     type: array
+                    description: "Cada item tiene SKU real del catálogo BMC (ej: IROOF50, GFS50, 6838, 6842, TMOME, ARATRAP, C.But., Bromplast, PU100MM, RPOP)"
                     items:
                       type: object
                       properties:
+                        sku:
+                          type: string
+                          description: SKU real del catálogo BMC
                         descripcion:
                           type: string
                         cantidad:
@@ -207,9 +229,9 @@ components:
               description: Advertencias de autoportancia u otras. Mostrar al cliente SIEMPRE.
               items:
                 type: string
-            envio_referencia_usd:
+            envio_usd:
               type: number
-              description: Costo referencial de envío en USD
+              description: "Costo de envío en USD. Solo presente si se proporcionó envio_usd en el request."
             nota:
               type: string
 
@@ -229,11 +251,14 @@ components:
           description: "Si no tenes cotizacion_id ni cotizacion_data, pasa los mismos params que /api/cotizar"
         familia:
           type: string
-          enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOPANEL_EPS, ISOWALL_PIR]
+          enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOROOF_FOIL, ISOROOF_PLUS, ISOPANEL_EPS, ISOWALL_PIR, ISOFRIG_PIR]
         espesor_mm:
           type: number
         ancho_m:
           type: number
+        cant_paneles:
+          type: number
+          description: "Cantidad de paneles (alternativo a ancho_m)"
         largo_m:
           type: number
         lista_precios:
@@ -250,6 +275,14 @@ components:
           type: string
           enum: [metal, hormigon, mixto]
           default: metal
+        tiene_cumbrera:
+          type: boolean
+          default: false
+        tiene_canalon:
+          type: boolean
+          default: false
+        envio_usd:
+          type: number
         cliente:
           type: object
           description: Datos opcionales del cliente para incluir en el PDF
