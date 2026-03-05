@@ -104,11 +104,11 @@ function resolverGoteroData(familia, espesor_mm) {
 }
 
 /**
- * Add an accessory item to the BOM list. Skips if sku is null.
+ * Add an accessory item to the BOM list. Skips if sku is null, cantidad is not finite, or cantidad <= 0.
  * @returns {number} subtotal added
  */
 function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
-  if (!sku || cantidad <= 0) return 0;
+  if (!sku || !Number.isFinite(cantidad) || cantidad <= 0) return 0;
   const acc = getAccessoryInfo(sku, lista_precios);
   const precio_unit = acc.precio;
   const subtotal = Math.round(cantidad * precio_unit * 100) / 100;

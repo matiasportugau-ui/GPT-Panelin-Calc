@@ -179,3 +179,35 @@ describe('calcTechoCompleto — input por cant_paneles', () => {
     expect(panel.cantidad).toBe(10);
   });
 });
+
+describe('addItem — NaN / invalid cantidad guard', () => {
+  // Access the internal addItem by testing its effect through calcTechoCompleto
+  // with inputs that would produce NaN quantities for accessories if not guarded.
+  test('ningún item tiene subtotal NaN cuando los inputs son válidos', () => {
+    const result = calcTechoCompleto({
+      familia: 'ISOROOF_3G',
+      espesor_mm: 50,
+      ancho_m: 4,
+      largo_m: 8,
+    });
+    result.items.forEach(item => {
+      expect(Number.isFinite(item.subtotal)).toBe(true);
+      expect(Number.isFinite(item.cantidad)).toBe(true);
+    });
+  });
+
+  test('ningún item tiene subtotal NaN con canalón y cumbrera', () => {
+    const result = calcTechoCompleto({
+      familia: 'ISODEC_EPS',
+      espesor_mm: 100,
+      ancho_m: 6,
+      largo_m: 10,
+      tiene_canalon: true,
+      tiene_cumbrera: true,
+    });
+    result.items.forEach(item => {
+      expect(Number.isFinite(item.subtotal)).toBe(true);
+      expect(Number.isFinite(item.cantidad)).toBe(true);
+    });
+  });
+});
