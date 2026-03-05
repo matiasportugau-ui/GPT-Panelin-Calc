@@ -5,36 +5,9 @@ const { calcTechoCompleto } = require('./techo');
 const { calcParedCompleto } = require('./pared');
 const { validarAutoportancia } = require('./autoportancia');
 const { ivaRate } = require('../data/catalog');
+const { getConfig } = require('../data/config_loader');
 
 const ESCENARIOS_VALIDOS = ['solo_techo', 'solo_fachada', 'techo_fachada', 'camara_frigorifica'];
-
-// Límites de largo por familia (metros)
-const PANEL_LARGOS = {
-  ISODEC_EPS:   { lmin: 2.3,  lmax: 14   },
-  ISODEC_PIR:   { lmin: 3.5,  lmax: 14   },
-  ISOROOF_3G:   { lmin: 3.5,  lmax: 8.5  },
-  ISOROOF_FOIL: { lmin: 3.5,  lmax: 8.5  },
-  ISOROOF_PLUS: { lmin: 3.5,  lmax: 8.5  },
-  ISOPANEL_EPS: { lmin: 2.3,  lmax: 14   },
-  ISOWALL_PIR:  { lmin: 3.5,  lmax: 14   },
-  ISOFRIG_PIR:  { lmin: 2.3,  lmax: 14   },
-};
-
-// Restricciones de color por familia y espesor
-// colMax: espesor máximo disponible para ese color
-// nota: advertencia a mostrar
-const COLOR_RESTRICCIONES = {
-  ISODEC_EPS: {
-    Gris:  { colMax: 150, nota: 'Solo 100–150mm · +20 días hábiles de entrega' },
-    Rojo:  { colMax: 150, nota: 'Solo 100–150mm · +20 días hábiles de entrega' },
-    Blanco: {},
-  },
-  ISOROOF_3G: {
-    Blanco: { minArea: 500, nota: 'Mínimo 500 m² por pedido' },
-    Gris:   {},
-    Rojo:   {},
-  },
-};
 
 /**
  * Orquestador principal. Genera una cotización completa según el escenario.
@@ -112,8 +85,10 @@ function generarCotizacion(params) {
   const warnings = [];
   const secciones = [];
 
-  // Validación lmin / lmax por familia
-  const limites = PANEL_LARGOS[familia];
+  const cfg = getConfig();
+
+  // Validación lmin / lmax por familia (desde logic_config.json)
+  const limites = cfg.panel_largos[familia];
   if (limites) {
     if (largo_m < limites.lmin) {
       warnings.push(`ADVERTENCIA: largo ${largo_m}m está por debajo del mínimo de ${limites.lmin}m para ${familia}.`);
@@ -123,16 +98,16 @@ function generarCotizacion(params) {
     }
   }
 
-  // Validación de color con restricciones por familia
+  // Validación de color (desde logic_config.json)
   if (color) {
-    const famRestr = COLOR_RESTRICCIONES[familia];
+    const famRestr = cfg.colores[familia];
     if (famRestr) {
       const colorRestr = famRestr[color];
       if (colorRestr === undefined) {
         warnings.push(`Color "${color}" no disponible para ${familia}.`);
       } else {
-        if (colorRestr.colMax && Number(espesor_mm) > colorRestr.colMax) {
-          warnings.push(`Color "${color}" en ${familia} solo disponible hasta ${colorRestr.colMax}mm. Espesor solicitado: ${espesor_mm}mm.`);
+        if (colorRestr.colMax_mm && Number(espesor_mm) > colorRestr.colMax_mm) {
+          warnings.push(`Color "${color}" en ${familia} solo disponible hasta ${colorRestr.colMax_mm}mm. Espesor solicitado: ${espesor_mm}mm.`);
         }
         if (colorRestr.nota) {
           warnings.push(`Color "${color}": ${colorRestr.nota}`);

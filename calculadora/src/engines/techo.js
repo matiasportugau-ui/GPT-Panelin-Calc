@@ -1,6 +1,7 @@
 'use strict';
 
 const { getPanelInfo, getAccessoryInfo } = require('../data/catalog');
+const { getConfig } = require('../data/config_loader');
 
 // Gotero SKU lookup tables by family and thickness
 const ISOROOF_GOTERO = {
@@ -262,56 +263,53 @@ function calcTechoCompleto({
   // ── Fijaciones según sistema de fijación de la familia ──────────────────
   const sist = SIST_FIJACION_TECHO[familia] || 'tmome';
 
+  const fp = getConfig().formula_params.techo;
+
   if (sist === 'varilla_tuerca') {
-    // Sistema varilla roscada 3/8" (ISODEC_EPS / ISODEC_PIR)
-    // Puntos de fijación = (paneles × apoyos_reales × 2) + (largo × 2 / 2.5)
-    const apoyosReales = apoyos > 0 ? apoyos : 2; // mínimo 2 apoyos estructurales
-    const ptosFij = Math.ceil((cantP * apoyosReales * 2) + (largo_m * 2 / 2.5));
-    const cantVarillas = Math.ceil(ptosFij / 4);
-    const cantTuercas = cantVarillas * 2;
-    const cantArcCarr = cantVarillas * 2;
-    const cantArPP = cantVarillas * 2;
+    // ptos = (paneles × apoyos × laterales) + (largo × 2 / intervalo_largo)
+    const apoyosReales = apoyos > 0 ? apoyos : fp.varilla_tuerca.apoyos_minimos_default;
+    const ptosFij = Math.ceil((cantP * apoyosReales * fp.varilla_tuerca.laterales_por_punto) + (largo_m * 2 / fp.varilla_tuerca.intervalo_largo_m));
+    const cantVarillas = Math.ceil(ptosFij * fp.varilla_tuerca.varillas_por_punto);
+    const cantTuercas  = cantVarillas * 2;
+    const cantArcCarr  = cantVarillas * 2;
+    const cantArPP     = cantVarillas * 2;
 
     subtotal += addItem(items, { sku: 'VARILLA38',  descripcion: 'Varilla roscada 3/8"',          cantidad: cantVarillas, unidad: 'unid', lista_precios });
     subtotal += addItem(items, { sku: 'TUERCA38',   descripcion: 'Tuerca 3/8" galv.',              cantidad: cantTuercas,  unidad: 'unid', lista_precios });
     subtotal += addItem(items, { sku: 'ARCA38',     descripcion: 'Arandela carrocero 3/8"',        cantidad: cantArcCarr,  unidad: 'unid', lista_precios });
     subtotal += addItem(items, { sku: 'ARAPP',      descripcion: 'Tortuga PVC (arandela PP)',       cantidad: cantArPP,     unidad: 'unid', lista_precios });
-
-    // Taco expansivo solo para estructuras de hormigón
     if (estructura === 'hormigon') {
       subtotal += addItem(items, { sku: 'TACEXP38', descripcion: 'Taco expansivo 3/8"',             cantidad: ptosFij,      unidad: 'unid', lista_precios });
     }
 
   } else if (sist === 'caballete_tornillo') {
-    // Sistema caballete + tornillo aguja 5" (ISOROOF_*)
-    // Caballetes: ceil(paneles × 3 × (largo/2.9 + 1) + (largo × 2 / 0.3))
-    const cantCaballetes = Math.ceil((cantP * 3 * (largo_m / 2.9 + 1)) + (largo_m * 2 / 0.3));
-    const cantAgujas = cantCaballetes * 2;
-    const cajasAgujas = Math.ceil(cantAgujas / 100); // vienen de a x100
+    // caballetes = ceil(paneles × tramos × (largo/paso + 1) + (largo × 2 / intervalo_perim))
+    const cantCaballetes = Math.ceil(
+      (cantP * fp.caballete.tramos_por_panel * (largo_m / fp.caballete.paso_apoyo_m + 1)) +
+      (largo_m * 2 / fp.caballete.intervalo_perimetro_m)
+    );
+    const cajasAgujas = Math.ceil(cantCaballetes * 2 / 100);
 
     subtotal += addItem(items, { sku: 'CABALLETE',  descripcion: 'Caballete (arandela trapezoidal)', cantidad: cantCaballetes, unidad: 'unid', lista_precios });
     subtotal += addItem(items, { sku: 'TORN_AGUJA', descripcion: 'Tornillo aguja 5" (caja ×100)',    cantidad: cajasAgujas,    unidad: 'caja', lista_precios });
 
   } else {
-    // Sistema TMOME + ARATRAP (~6 per m²) — familias genéricas
-    const cantTornillos = Math.ceil(areaRaw * 6);
+    const cantTornillos = Math.ceil(areaRaw * fp.tornillos_por_m2_tmome);
     subtotal += addItem(items, { sku: 'TMOME',   descripcion: 'Tornillo TMOME (madera/metal)',    cantidad: cantTornillos, unidad: 'und', lista_precios });
     subtotal += addItem(items, { sku: 'ARATRAP', descripcion: 'Arandela Trapezoidal ARATRAP',     cantidad: cantTornillos, unidad: 'und', lista_precios });
   }
 
   // ── Selladores ───────────────────────────────────────────────────────────
-  // Cinta butilo entre juntas longitudinales (1 rollo por (cantP-1)×largo / 22.5m)
-  const cantButilo = Math.max(1, Math.ceil((cantP - 1) * largo_m / 22.5));
+  const cantButilo = Math.max(1, Math.ceil((cantP - 1) * largo_m / fp.butilo_ml_por_rollo_m));
   subtotal += addItem(items, {
     sku: 'C.But.',
-    descripcion: 'Cinta Butilo C.But. (22.5m)',
+    descripcion: `Cinta Butilo C.But. (${fp.butilo_ml_por_rollo_m}m)`,
     cantidad: cantButilo,
     unidad: 'rollo',
     lista_precios,
   });
 
-  // Silicona Bromplast (1 cartucho por panel × 0.5 — aprox. 2 cartuchos por panel)
-  const cantSilicona = Math.ceil(cantP * 0.5);
+  const cantSilicona = Math.ceil(cantP * fp.silicona_cartuchos_por_panel);
   subtotal += addItem(items, {
     sku: 'Bromplast',
     descripcion: 'Silicona Bromplast (600ml)',

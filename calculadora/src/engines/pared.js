@@ -1,6 +1,7 @@
 'use strict';
 
 const { getPanelInfo, getAccessoryInfo } = require('../data/catalog');
+const { getConfig } = require('../data/config_loader');
 
 // Perfil U SKU by panel thickness (solera superior + inferior), pieza = 3m
 const PERFIL_U_SKU = {
@@ -111,11 +112,13 @@ function calcParedCompleto({
     area_neta_m2: areaNeta,
   });
 
+  const fp = getConfig().formula_params.pared;
+
   // 2. Perfil U — solera superior + inferior (2 × anchoEfectivo, piezas de 3m)
   const puSku = PERFIL_U_SKU[Number(espesor_mm)];
   if (puSku) {
     const mlPerfilU = 2 * anchoEfectivo;
-    const cantPU = Math.ceil(mlPerfilU / PERFIL_U_LENGTH);
+    const cantPU = Math.ceil(mlPerfilU / fp.perfil_u_largo_pieza_m);
     subtotal += addItem(items, {
       sku: puSku,
       descripcion: `Perfil U ${espesor_mm}mm (soleras sup+inf)`,
@@ -127,7 +130,7 @@ function calcParedCompleto({
 
   // 3. Perfil K2 — juntas verticales entre paneles (cantP-1 juntas × altura)
   if (incl_k2 && cantP > 1) {
-    const juntasK2 = (cantP - 1) * Math.ceil(largo_m / 3.0);
+    const juntasK2 = (cantP - 1) * Math.ceil(largo_m / fp.k2_largo_pieza_m);
     subtotal += addItem(items, {
       sku: 'K2',
       descripcion: `Perfil K2 junta interior (${cantP - 1} juntas)`,
@@ -139,7 +142,7 @@ function calcParedCompleto({
 
   // 4. Esquineros exteriores
   if (num_esq_ext > 0) {
-    const cantEsqExt = num_esq_ext * Math.ceil(largo_m / 3.0);
+    const cantEsqExt = num_esq_ext * Math.ceil(largo_m / fp.esq_largo_pieza_m);
     subtotal += addItem(items, {
       sku: 'ESQ-EXT',
       descripcion: `Esquinero exterior (${num_esq_ext} esq.)`,
@@ -151,7 +154,7 @@ function calcParedCompleto({
 
   // 5. Esquineros interiores
   if (num_esq_int > 0) {
-    const cantEsqInt = num_esq_int * Math.ceil(largo_m / 3.0);
+    const cantEsqInt = num_esq_int * Math.ceil(largo_m / fp.esq_largo_pieza_m);
     subtotal += addItem(items, {
       sku: 'ESQ-INT',
       descripcion: `Esquinero interior (${num_esq_int} esq.)`,
@@ -163,7 +166,7 @@ function calcParedCompleto({
 
   // 6. Ángulo aluminio 5852 (opcional)
   if (incl_5852) {
-    const cant5852 = Math.ceil(anchoEfectivo / 6.8);
+    const cant5852 = Math.ceil(anchoEfectivo / fp.angulo_5852_largo_pieza_m);
     subtotal += addItem(items, {
       sku: 'PLECHU98',
       descripcion: 'Ángulo aluminio 5852 (6.8m)',
@@ -176,8 +179,7 @@ function calcParedCompleto({
   // ── Fijaciones ───────────────────────────────────────────────────────────
   // Tornillos T2 + anclaje H° para todas las estructuras (pared siempre requiere anclaje)
   if (estructura === 'metal' || estructura === 'mixto') {
-    // Tornillos TMOME (~5.5 per m² sobre área neta)
-    const cantTornillos = Math.ceil(areaNeta * 5.5);
+    const cantTornillos = Math.ceil(areaNeta * fp.tornillos_por_m2_tmome);
     subtotal += addItem(items, {
       sku: 'TMOME',
       descripcion: 'Tornillo TMOME (madera/metal)',
@@ -195,8 +197,7 @@ function calcParedCompleto({
     });
   }
 
-  // Anclajes H° — 1 cada 0.30m lineal de ancho efectivo (siempre, independiente de estructura)
-  const cantAnclajes = Math.ceil(anchoEfectivo / 0.30);
+  const cantAnclajes = Math.ceil(anchoEfectivo / fp.anclaje_intervalo_m);
   subtotal += addItem(items, {
     sku: 'ANCLAJE_H',
     descripcion: 'Kit anclaje H° (1 c/30cm)',
@@ -205,9 +206,8 @@ function calcParedCompleto({
     lista_precios,
   });
 
-  // Remaches POP — 2 por panel para unión panel-a-panel
-  const cantRemaches = cantP * 2;
-  const cantCajasRPOP = Math.max(1, Math.ceil(cantRemaches / 1000));
+  const cantRemaches = cantP * fp.remaches_por_panel;
+  const cantCajasRPOP = Math.max(1, Math.ceil(cantRemaches / fp.remaches_por_caja));
   subtotal += addItem(items, {
     sku: 'RPOP',
     descripcion: `Remaches POP RPOP (caja 1000u) — ${cantRemaches} remaches`,
@@ -217,8 +217,7 @@ function calcParedCompleto({
   });
 
   // ── Selladores ───────────────────────────────────────────────────────────
-  // Cinta butilo entre juntas longitudinales
-  const cantButilo = Math.max(1, Math.ceil((cantP - 1) * largo_m / 22.5));
+  const cantButilo = Math.max(1, Math.ceil((cantP - 1) * largo_m / fp.butilo_ml_por_rollo_m));
   subtotal += addItem(items, {
     sku: 'C.But.',
     descripcion: 'Cinta Butilo C.But. (22.5m)',
@@ -231,7 +230,7 @@ function calcParedCompleto({
   // Juntas verticales = (cantP-1) × alto
   // Perímetro superior + inferior = anchoEfectivo × 2
   const mlJuntas = Math.round(((cantP - 1) * largo_m + anchoEfectivo * 2) * 100) / 100;
-  const cantSilicona = Math.ceil(mlJuntas / 8); // 1 cartucho cubre ~8 ml de junta
+  const cantSilicona = Math.ceil(mlJuntas / fp.silicona_ml_por_cartucho);
   subtotal += addItem(items, {
     sku: 'Bromplast',
     descripcion: `Silicona Bromplast (600ml) — ${mlJuntas}ml de juntas`,

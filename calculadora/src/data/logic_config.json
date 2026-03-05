@@ -1,0 +1,111 @@
+{
+  "_version": "5.1.0",
+  "_actualizado": "2026-03-05",
+  "_nota": "Archivo de configuración maestra. Todos los precios en USD excl. IVA. Editar y subir vía POST /api/logica para actualizar sin reiniciar.",
+
+  "iva_rate": 0.22,
+
+  "formula_params": {
+    "_nota": "Multiplicadores y coberturas usados en los cálculos de BOM",
+
+    "techo": {
+      "tornillos_por_m2_tmome":          6,
+      "silicona_cartuchos_por_panel":    0.5,
+      "butilo_ml_por_rollo_m":           22.5,
+      "cumbrera_largo_pieza_m":          3.0,
+      "soporte_canalon_intervalo_m":     1.5,
+      "caballete": {
+        "_nota": "caballetes = ceil(paneles × tramos × (largo/paso_apoyo + 1) + (largo × 2 / intervalo_perimetro))",
+        "tramos_por_panel":              3,
+        "paso_apoyo_m":                  2.9,
+        "intervalo_perimetro_m":         0.30
+      },
+      "varilla_tuerca": {
+        "_nota": "ptos_fijacion = ceil(paneles × apoyos × laterales + largo × 2 / intervalo_largo)",
+        "laterales_por_punto":           2,
+        "intervalo_largo_m":             2.5,
+        "varillas_por_punto":            0.25,
+        "apoyos_minimos_default":        2
+      }
+    },
+
+    "pared": {
+      "tornillos_por_m2_tmome":          5.5,
+      "silicona_ml_por_cartucho":        8,
+      "butilo_ml_por_rollo_m":           22.5,
+      "anclaje_intervalo_m":             0.30,
+      "perfil_u_largo_pieza_m":          3.0,
+      "k2_largo_pieza_m":                3.0,
+      "esq_largo_pieza_m":               3.0,
+      "angulo_5852_largo_pieza_m":       6.8,
+      "remaches_por_panel":              2,
+      "remaches_por_caja":               1000
+    }
+  },
+
+  "panel_largos": {
+    "_nota": "Largo mínimo y máximo fabricable por familia (metros)",
+    "ISODEC_EPS":   { "lmin": 2.3,  "lmax": 14   },
+    "ISODEC_PIR":   { "lmin": 3.5,  "lmax": 14   },
+    "ISOROOF_3G":   { "lmin": 3.5,  "lmax": 8.5  },
+    "ISOROOF_FOIL": { "lmin": 3.5,  "lmax": 8.5  },
+    "ISOROOF_PLUS": { "lmin": 3.5,  "lmax": 8.5  },
+    "ISOPANEL_EPS": { "lmin": 2.3,  "lmax": 14   },
+    "ISOWALL_PIR":  { "lmin": 3.5,  "lmax": 14   },
+    "ISOFRIG_PIR":  { "lmin": 2.3,  "lmax": 14   }
+  },
+
+  "colores": {
+    "_nota": "Restricciones de color por familia. colMax_mm: espesor máximo disponible en ese color.",
+    "ISODEC_EPS": {
+      "Blanco": {},
+      "Gris":   { "colMax_mm": 150, "nota": "Solo 100–150mm · +20 días hábiles de entrega" },
+      "Rojo":   { "colMax_mm": 150, "nota": "Solo 100–150mm · +20 días hábiles de entrega" }
+    },
+    "ISOROOF_3G": {
+      "Terracota": {},
+      "Gris":      {},
+      "Blanco":    { "minArea_m2": 500, "nota": "Mínimo 500 m² por pedido" },
+      "Rojo":      {}
+    },
+    "ISODEC_PIR":   { "Blanco": {}, "Gris": {} },
+    "ISOROOF_FOIL": { "Blanco": {} },
+    "ISOROOF_PLUS": { "Blanco": {}, "Gris": {} },
+    "ISOPANEL_EPS": { "Blanco": {}, "Gris": {}, "Rojo": {} },
+    "ISOWALL_PIR":  { "Blanco": {}, "Gris": {} },
+    "ISOFRIG_PIR":  { "Blanco": {} }
+  },
+
+  "accesorios": {
+    "_nota": "Precios hardcodeados (USD excl. IVA) para SKUs no presentes en catalog_real.csv. Editar aquí para actualizar sin tocar código.",
+
+    "VARILLA38":  { "nombre": "Varilla roscada 3/8\"",           "precio_venta": 3.12,  "precio_web": 3.64,  "unidad": "unid",  "largo_m": null },
+    "TUERCA38":   { "nombre": "Tuerca 3/8\" galv.",               "precio_venta": 0.12,  "precio_web": 0.07,  "unidad": "unid",  "largo_m": null },
+    "ARCA38":     { "nombre": "Arandela carrocero 3/8\"",         "precio_venta": 1.68,  "precio_web": 0.64,  "unidad": "unid",  "largo_m": null },
+    "ARAPP":      { "nombre": "Tortuga PVC (arandela PP)",        "precio_venta": 1.27,  "precio_web": 1.48,  "unidad": "unid",  "largo_m": null },
+    "TACEXP38":   { "nombre": "Taco expansivo 3/8\"",             "precio_venta": 0.96,  "precio_web": 1.12,  "unidad": "unid",  "largo_m": null },
+
+    "CABALLETE":  { "nombre": "Caballete (arandela trapezoidal)", "precio_venta": 0.50,  "precio_web": 0.46,  "unidad": "unid",  "largo_m": null },
+    "TORN_AGUJA": { "nombre": "Tornillo aguja 5\"",               "precio_venta": 17.00, "precio_web": 17.00, "unidad": "x100",  "largo_m": null },
+
+    "ANCLAJE_H":  { "nombre": "Kit anclaje H°",                  "precio_venta": 0.09,  "precio_web": 0.03,  "unidad": "unid",  "largo_m": null },
+    "TORN_T1":    { "nombre": "Tornillo T1 (perfilería)",         "precio_venta": 5.00,  "precio_web": 5.00,  "unidad": "x100",  "largo_m": null },
+    "TORN_T2":    { "nombre": "Tornillo T2 (fachada)",            "precio_venta": 5.00,  "precio_web": 5.00,  "unidad": "x100",  "largo_m": null },
+
+    "K2":         { "nombre": "Perfil K2 (junta interior)",       "precio_venta": 8.59,  "precio_web": 10.48, "unidad": "pieza", "largo_m": 3.0  },
+    "ESQ-EXT":    { "nombre": "Esquinero exterior",               "precio_venta": 8.59,  "precio_web": 10.48, "unidad": "pieza", "largo_m": 3.0  },
+    "ESQ-INT":    { "nombre": "Esquinero interior",               "precio_venta": 8.59,  "precio_web": 10.48, "unidad": "pieza", "largo_m": 3.0  },
+    "G2-100":     { "nombre": "Perfil G2 100mm",                  "precio_venta": 15.34, "precio_web": 18.72, "unidad": "pieza", "largo_m": 3.0  },
+    "G2-150":     { "nombre": "Perfil G2 150mm",                  "precio_venta": 17.61, "precio_web": 21.49, "unidad": "pieza", "largo_m": 3.0  },
+    "G2-200":     { "nombre": "Perfil G2 200mm",                  "precio_venta": 21.13, "precio_web": 25.78, "unidad": "pieza", "largo_m": 3.0  },
+    "G2-250":     { "nombre": "Perfil G2 250mm",                  "precio_venta": 21.30, "precio_web": 25.99, "unidad": "pieza", "largo_m": 3.0  },
+    "PLECHU98":   { "nombre": "Ángulo aluminio 5852 (6.8m)",       "precio_venta": 51.84, "precio_web": 63.24, "unidad": "pieza", "largo_m": 6.8  },
+
+    "MEMBRANA":   { "nombre": "Membrana autoadhesiva 30cm×10m",   "precio_venta": 16.62, "precio_web": 20.28, "unidad": "rollo", "largo_m": null },
+    "ESPUMA_PU":  { "nombre": "Espuma poliuretano 750cm³",         "precio_venta": 25.46, "precio_web": 31.06, "unidad": "unid",  "largo_m": null },
+
+    "GFCGR30":    { "nombre": "Gotero frontal greca ISOROOF",      "precio_venta": 17.99, "precio_web": 19.38, "unidad": "pieza", "largo_m": 3.03 },
+    "GLDCAM50":   { "nombre": "Gotero lateral cámara 50mm",        "precio_venta": 22.32, "precio_web": 27.23, "unidad": "pieza", "largo_m": 3.0  },
+    "GLDCAM80":   { "nombre": "Gotero lateral cámara 80mm",        "precio_venta": 25.11, "precio_web": 30.63, "unidad": "pieza", "largo_m": 3.0  }
+  }
+}
