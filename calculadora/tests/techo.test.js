@@ -2,7 +2,7 @@
 
 const { calcTechoCompleto } = require('../src/engines/techo');
 
-describe('calcTechoCompleto — ISODEC EPS 100mm 5x11m', () => {
+describe('calcTechoCompleto — ISODEC EPS 100mm 5×11m', () => {
   let result;
 
   beforeAll(() => {
@@ -11,8 +11,6 @@ describe('calcTechoCompleto — ISODEC EPS 100mm 5x11m', () => {
       espesor_mm: 100,
       ancho_m: 5,
       largo_m: 11,
-      apoyos: 0,
-      tiene_canalon: true,
       lista_precios: 'venta',
     });
   });
@@ -21,7 +19,7 @@ describe('calcTechoCompleto — ISODEC EPS 100mm 5x11m', () => {
     expect(result.tipo).toBe('techo');
   });
 
-  test('cantidad de paneles es ceil(5 / 1.12) = 5', () => {
+  test('cant_paneles es ceil(5 / 1.12) = 5', () => {
     expect(result.cant_paneles).toBe(Math.ceil(5 / 1.12));
   });
 
@@ -29,18 +27,49 @@ describe('calcTechoCompleto — ISODEC EPS 100mm 5x11m', () => {
     expect(result.subtotal).toBeGreaterThan(0);
   });
 
-  test('items tienen SKUs reales del catalogo', () => {
-    const skus = result.items.map(i => i.sku);
-    expect(skus).toContain('ISD100EPS_1');
-    expect(skus).toContain('6838');   // Gotero Frontal ISODEC 100mm
-    expect(skus).toContain('6842');   // Gotero Lateral ISODEC 100mm
-    expect(skus).toContain('GSDECAM50'); // Gotero Superior
-    expect(skus).toContain('6801');   // Canalon 100mm
-    expect(skus).toContain('6805');   // Soporte canalon
-    expect(skus).toContain('TMOME');  // Tornillo
-    expect(skus).toContain('ARATRAP'); // Arandela
-    expect(skus).toContain('C.But.'); // Cinta butilo
-    expect(skus).toContain('Bromplast'); // Silicona
+  test('panel tiene SKU real ISODEC_EPS_100', () => {
+    const panel = result.items.find(i => i.sku === 'ISODEC_EPS_100');
+    expect(panel).toBeDefined();
+    expect(panel.cantidad).toBe(Math.ceil(5 / 1.12));
+  });
+
+  test('gotero frontal tiene SKU real 6838', () => {
+    const item = result.items.find(i => i.sku === '6838');
+    expect(item).toBeDefined();
+    expect(item.cantidad).toBeGreaterThan(0);
+  });
+
+  test('gotero lateral tiene SKU real 6842', () => {
+    const item = result.items.find(i => i.sku === '6842');
+    expect(item).toBeDefined();
+    expect(item.cantidad).toBeGreaterThan(0);
+  });
+
+  test('gotero superior/babeta tiene SKU real 6828', () => {
+    const item = result.items.find(i => i.sku === '6828');
+    expect(item).toBeDefined();
+  });
+
+  test('tornillos TMOME presentes', () => {
+    const item = result.items.find(i => i.sku === 'TMOME');
+    expect(item).toBeDefined();
+    expect(item.cantidad).toBeGreaterThan(0);
+  });
+
+  test('arandelas ARATRAP presentes', () => {
+    const item = result.items.find(i => i.sku === 'ARATRAP');
+    expect(item).toBeDefined();
+    expect(item.cantidad).toBeGreaterThan(0);
+  });
+
+  test('cinta butilo C.But. presente', () => {
+    const item = result.items.find(i => i.sku === 'C.But.');
+    expect(item).toBeDefined();
+  });
+
+  test('silicona Bromplast presente', () => {
+    const item = result.items.find(i => i.sku === 'Bromplast');
+    expect(item).toBeDefined();
   });
 
   test('area_m2 es correcto', () => {
@@ -48,9 +77,45 @@ describe('calcTechoCompleto — ISODEC EPS 100mm 5x11m', () => {
     const expected = Math.round(cantP * 1.12 * 11 * 100) / 100;
     expect(result.area_m2).toBe(expected);
   });
+
+  test('NO incluye canalón por defecto (tiene_canalon=false)', () => {
+    expect(result.items.find(i => i.sku === '6801')).toBeUndefined();
+  });
 });
 
-describe('calcTechoCompleto — ISOROOF 3G 50mm 4x8m', () => {
+describe('calcTechoCompleto — ISODEC EPS 100mm con canalón y cumbrera', () => {
+  let result;
+
+  beforeAll(() => {
+    result = calcTechoCompleto({
+      familia: 'ISODEC_EPS',
+      espesor_mm: 100,
+      ancho_m: 5,
+      largo_m: 11,
+      tiene_canalon: true,
+      tiene_cumbrera: true,
+    });
+  });
+
+  test('incluye canalón SKU 6801 cuando tiene_canalon=true', () => {
+    const item = result.items.find(i => i.sku === '6801');
+    expect(item).toBeDefined();
+    expect(item.cantidad).toBeGreaterThan(0);
+  });
+
+  test('incluye soporte canalón SKU 6805', () => {
+    const item = result.items.find(i => i.sku === '6805');
+    expect(item).toBeDefined();
+  });
+
+  test('incluye cumbrera SKU 6847 cuando tiene_cumbrera=true', () => {
+    const item = result.items.find(i => i.sku === '6847');
+    expect(item).toBeDefined();
+    expect(item.cantidad).toBeGreaterThan(0);
+  });
+});
+
+describe('calcTechoCompleto — ISOROOF 3G 50mm 4×8m', () => {
   let result;
 
   beforeAll(() => {
@@ -59,8 +124,6 @@ describe('calcTechoCompleto — ISOROOF 3G 50mm 4x8m', () => {
       espesor_mm: 50,
       ancho_m: 4,
       largo_m: 8,
-      apoyos: 0,
-      tiene_canalon: true,
       lista_precios: 'web',
     });
   });
@@ -69,62 +132,50 @@ describe('calcTechoCompleto — ISOROOF 3G 50mm 4x8m', () => {
     expect(result.tipo).toBe('techo');
   });
 
-  test('items incluye gotero frontal GFS50 para ISOROOF 50mm', () => {
-    const skus = result.items.map(i => i.sku);
-    expect(skus).toContain('GFS50');
+  test('panel SKU real es IROOF50', () => {
+    const panel = result.items.find(i => i.sku === 'IROOF50');
+    expect(panel).toBeDefined();
   });
 
-  test('items incluye gotero lateral GL50 para ISOROOF 50mm', () => {
-    const skus = result.items.map(i => i.sku);
-    expect(skus).toContain('GL50');
+  test('gotero frontal SKU es GFS50', () => {
+    const item = result.items.find(i => i.sku === 'GFS50');
+    expect(item).toBeDefined();
   });
 
-  test('items incluye canalon CD50 para ISOROOF 50mm', () => {
-    const skus = result.items.map(i => i.sku);
-    expect(skus).toContain('CD50');
+  test('gotero superior SKU es GFSUP50', () => {
+    const item = result.items.find(i => i.sku === 'GFSUP50');
+    expect(item).toBeDefined();
+  });
+
+  test('gotero lateral SKU es GL50', () => {
+    const item = result.items.find(i => i.sku === 'GL50');
+    expect(item).toBeDefined();
+  });
+
+  test('NO incluye caballete inventado (solo SKUs reales de catálogo)', () => {
+    const item = result.items.find(i => i.descripcion && i.descripcion.toLowerCase().includes('caballete'));
+    expect(item).toBeUndefined();
+  });
+
+  test('NO incluye varilla roscada inventada', () => {
+    const item = result.items.find(i => i.descripcion && i.descripcion.toLowerCase().includes('varilla'));
+    expect(item).toBeUndefined();
   });
 });
 
 describe('calcTechoCompleto — input por cant_paneles', () => {
-  test('calcula ancho correctamente desde cant_paneles', () => {
+  test('cant_paneles=10, largo_m=4.5, ISOROOF_3G 50mm', () => {
     const result = calcTechoCompleto({
       familia: 'ISOROOF_3G',
       espesor_mm: 50,
       cant_paneles: 10,
       largo_m: 4.5,
-      lista_precios: 'venta',
     });
     expect(result.cant_paneles).toBe(10);
-    expect(result.ancho_m).toBe(11); // 10 * 1.10
-    expect(result.subtotal).toBeGreaterThan(0);
-  });
-});
-
-describe('calcTechoCompleto — cumbrera y canalon opcionales', () => {
-  test('con cumbrera incluye SKU CUMROOF3M', () => {
-    const result = calcTechoCompleto({
-      familia: 'ISOROOF_3G',
-      espesor_mm: 50,
-      ancho_m: 5,
-      largo_m: 8,
-      tiene_cumbrera: true,
-      tiene_canalon: false,
-    });
-    const skus = result.items.map(i => i.sku);
-    expect(skus).toContain('CUMROOF3M');
-    expect(skus).not.toContain('CD50');
-  });
-
-  test('sin canalon no incluye canalon ni soporte', () => {
-    const result = calcTechoCompleto({
-      familia: 'ISODEC_EPS',
-      espesor_mm: 100,
-      ancho_m: 5,
-      largo_m: 11,
-      tiene_canalon: false,
-    });
-    const skus = result.items.map(i => i.sku);
-    expect(skus).not.toContain('6801');
-    expect(skus).not.toContain('6805');
+    expect(result.ancho_m).toBeCloseTo(10 * 1.10, 5);
+    expect(result.area_m2).toBeGreaterThan(0);
+    const panel = result.items.find(i => i.sku === 'IROOF50');
+    expect(panel).toBeDefined();
+    expect(panel.cantidad).toBe(10);
   });
 });
