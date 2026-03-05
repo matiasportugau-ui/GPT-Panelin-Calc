@@ -1,10 +1,10 @@
-# Guía de Integración — GPT Panelin v4.0
+# Guía de Integración — GPT Panelin v5.0
 
 ## Diagrama de Secuencia Completo
 
 ```
 ┌──────────────┐         ┌──────────────────────┐         ┌─────────────────────┐
-│   Usuario    │         │  GPT Panelin v4.0     │         │  Calculadora BMC    │
+│   Usuario    │         │  GPT Panelin v5.0     │         │  Calculadora BMC    │
 │  (ChatGPT)   │         │  (Cerebro Conversac.) │         │  API (Programática) │
 └──────┬───────┘         └──────────┬───────────┘         └──────────┬──────────┘
        │                            │                                 │
@@ -70,9 +70,13 @@ Genera una cotización completa con BOM, precios e IVA.
   "ancho_m": 5,
   "largo_m": 11,
   "lista_precios": "venta",
-  "apoyos": 0
+  "apoyos": 0,
+  "tiene_cumbrera": false,
+  "tiene_canalon": false
 }
 ```
+
+> Alternativamente, usar `cant_paneles` en lugar de `ancho_m` cuando el cliente especifica una cantidad de paneles. Parámetros adicionales: `num_aberturas` (aberturas en fachada), `estructura` (`metal`|`hormigon`|`mixto`), `envio_usd`.
 
 **Response:**
 ```json
@@ -96,8 +100,7 @@ Genera una cotización completa con BOM, precios e IVA.
       "moneda": "USD"
     },
     "warnings": [],
-    "envio_referencia_usd": 280
-  }
+    "nota": "Precios en USD sin IVA. IVA 22% incluido en total_con_iva."
 }
 ```
 

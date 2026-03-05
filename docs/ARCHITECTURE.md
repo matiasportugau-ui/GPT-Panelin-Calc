@@ -1,4 +1,4 @@
-# Arquitectura v4.0 — GPT Panelin Calc
+# Arquitectura v5.0 — GPT Panelin Calc
 
 ## Diagrama de Componentes
 
@@ -10,7 +10,7 @@
                │
                ▼
 ┌─────────────────────────────────────────────┐
-│     GPT PANELIN v4.0 (Cerebro Conversacional)│
+│     GPT PANELIN v5.0 (Cerebro Conversacional)│
 │                                             │
 │  ✅ Conversar con el cliente                │
 │  ✅ Extraer parámetros (NLP)                │
@@ -26,7 +26,7 @@
 │   CALCULADORA BMC API (Motor Programático)   │
 │                                             │
 │  ✅ Cálculos deterministas (techo/pared/BOM)│
-│  ✅ Resolución precios (lista venta/web)    │
+│  ✅ SKUs y precios desde catalog_real.csv   │
 │  ✅ Autoportancia + validaciones técnicas   │
 │  ✅ Generación PDF                          │
 │  ✅ JSON estructurado como response         │
@@ -58,7 +58,9 @@ GPT-Panelin-Calc/
 │   │   │   ├── bom.js
 │   │   │   └── autoportancia.js
 │   │   ├── data/
-│   │   │   └── precios.json    # Fuente única de precios
+│   │   │   ├── catalog.js          # Resuelve precios y SKUs desde el CSV
+│   │   │   ├── catalog_real.csv    # Catálogo maestro de productos BMC
+│   │   │   └── precios.json        # Precios de respaldo (legacy)
 │   │   ├── api/
 │   │   │   ├── server.js
 │   │   │   └── routes.js
@@ -73,6 +75,7 @@ GPT-Panelin-Calc/
     ├── INTEGRATION.md
     ├── ARCHITECTURE.md
     ├── MIGRATION_FROM_V3.md
+    ├── NEXT_STEPS.md
     └── DEPLOYMENT.md
 ```
 
@@ -80,11 +83,11 @@ GPT-Panelin-Calc/
 
 ### Separación de Responsabilidades
 - **GPT**: Lenguaje natural, ventas, extracción de parámetros
-- **API**: Cálculos deterministas, precios, PDF
+- **API**: Cálculos deterministas, SKUs reales, precios, PDF
 - **Frontend**: UI standalone para uso directo
 
 ### Fuente Única de Verdad
-- Precios: `calculadora/src/data/precios.json`
+- Precios y SKUs: `calculadora/src/data/catalog_real.csv` indexado por `catalog.js`
 - IVA: 22%, SIN incluir en unitarios, aplicado al total
 
 ### Determinismo

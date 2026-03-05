@@ -3,29 +3,29 @@
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
 ![React](https://img.shields.io/badge/React-18%2B-blue)
 ![License](https://img.shields.io/badge/License-No%20especificada-lightgrey)
-![Tests](https://img.shields.io/badge/Tests-29%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-41%20passing-brightgreen)
 
 Monorepo que unifica **GPT Panelin** (cerebro conversacional) con **Calculadora BMC** (motor programático de cálculo) para paneles sándwich Panelin — BMC Uruguay.
 
-## Arquitectura v4.0
+## Arquitectura v5.0
 
 ```
 Usuario (ChatGPT)
        ↓
-GPT Panelin v4.0          →    Conversa, extrae parámetros, interpreta resultados
+GPT Panelin v5.0          →    Conversa, extrae parámetros, interpreta resultados
        ↓ GPT Action
-Calculadora BMC API        →    Cálculos deterministas, BOM, precios, PDF
+Calculadora BMC API        →    Cálculos deterministas, BOM con SKUs reales, precios, PDF
 ```
 
 ## Antes vs Después
 
-| Aspecto | Antes (repos separados) | Después (v4.0) |
+| Aspecto | Antes (repos separados) | Después (v5.0) |
 |---------|------------------------|----------------|
 | **IVA** | Ambiguo (incluido / al final) | ✅ Unificado: 22% al total, sin incluir en unitarios |
-| **Precios** | 6+ archivos JSON + hardcoded | ✅ Fuente única: `calculadora/src/data/precios.json` |
+| **Precios / SKUs** | 6+ archivos JSON + hardcoded | ✅ Fuente única: `catalog_real.csv` vía `catalog.js` |
 | **BOM** | GPT generativo + engines separados | ✅ Solo engines deterministas vía API |
 | **PDF** | reportlab (Python) + jsPDF (browser) | ✅ jsPDF en Node.js vía API |
-| **Tests** | Sin tests | ✅ 24 tests unitarios + integración |
+| **Tests** | Sin tests | ✅ 41 tests unitarios + integración |
 | **GPT tokens** | ~32KB instrucciones con fórmulas | ✅ ~120 líneas de config limpia |
 
 ## Estructura
@@ -39,16 +39,20 @@ GPT-Panelin-Calc/
 ├── calculadora/            # Motor programático (Express API)
 │   ├── src/
 │   │   ├── engines/        # techo.js, pared.js, bom.js, precios.js, autoportancia.js
-│   │   ├── data/precios.json
+│   │   ├── data/
+│   │   │   ├── catalog.js          # Resuelve precios y SKUs
+│   │   │   ├── catalog_real.csv    # Catálogo maestro de productos BMC
+│   │   │   └── precios.json        # Precios de respaldo (legacy)
 │   │   ├── api/            # server.js, routes.js
 │   │   └── pdf/generator.js
-│   └── tests/              # 24 tests Jest
+│   └── tests/              # 41 tests Jest
 ├── frontend/               # UI standalone (backward compatible)
 │   └── PanelinCalculadoraV3.jsx
 └── docs/
     ├── INTEGRATION.md
     ├── ARCHITECTURE.md
     ├── MIGRATION_FROM_V3.md
+    ├── NEXT_STEPS.md
     └── DEPLOYMENT.md
 ```
 
@@ -60,13 +64,13 @@ cd calculadora/
 npm install
 npm start        # Producción
 npm run dev      # Desarrollo con nodemon
-npm test         # 24 tests
+npm test         # 41 tests
 ```
 
 ### Endpoints
 ```
 GET  /health                    → Estado del servicio
-GET  /api/productos             → Catálogo de paneles
+GET  /api/productos             → Catálogo de paneles (SKUs reales)
 GET  /api/autoportancia         → Tabla de luces máximas
 POST /api/cotizar               → Cotización completa con BOM + IVA
 POST /api/pdf                   → PDF descargable
@@ -81,9 +85,14 @@ curl -X POST http://localhost:3000/api/cotizar \
     "familia": "ISODEC_EPS",
     "espesor_mm": 100,
     "ancho_m": 5,
-    "largo_m": 11
+    "largo_m": 11,
+    "lista_precios": "venta",
+    "tiene_cumbrera": false,
+    "tiene_canalon": false
   }'
 ```
+
+Parámetros opcionales adicionales: `cant_paneles` (en lugar de `ancho_m`), `apoyos`, `num_aberturas`, `estructura` (`metal`|`hormigon`|`mixto`), `envio_usd`.
 
 ### Frontend Standalone
 Copiar `frontend/PanelinCalculadoraV3.jsx` a cualquier proyecto React — funciona sin backend.
@@ -93,14 +102,14 @@ Ver `docs/DEPLOYMENT.md` para instrucciones de configuración del GPT Action.
 
 ## Deploy
 
-- **API**: Vercel (`cd calculadora && vercel --prod`)
+- **API**: Vercel (`cd calculadora && vercel --prod`) → `https://calculadora-five-sand.vercel.app`
 - **GPT**: OpenAI Builder con `gpt/gpt_action_schema.yaml`
 
 ## Documentación
 
 - [**Pasos a seguir (setup completo)**](docs/NEXT_STEPS.md)
 - [Integración completa](docs/INTEGRATION.md)
-- [Arquitectura v4.0](docs/ARCHITECTURE.md)
+- [Arquitectura v5.0](docs/ARCHITECTURE.md)
 - [Migración desde v3](docs/MIGRATION_FROM_V3.md)
 - [Guía de deploy](docs/DEPLOYMENT.md)
 

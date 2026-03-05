@@ -1,4 +1,4 @@
-# Pasos a Seguir — GPT Panelin v4.0
+# Pasos a Seguir — GPT Panelin v5.0
 
 Guía ordenada para poner en producción el sistema completo desde cero.
 
@@ -14,13 +14,13 @@ cd GPT-Panelin-Calc
 cd calculadora/
 npm install
 
-# Verificar que los tests pasan (29 tests)
+# Verificar que los tests pasan (41 tests)
 npm test
 ```
 
 Resultado esperado:
 ```
-Tests:  29 passed, 29 total
+Tests:  41 passed, 41 total
 ```
 
 ---
@@ -36,7 +36,7 @@ Verificar que funciona:
 ```bash
 # Health check
 curl http://localhost:3000/health
-# → { "status": "ok", "service": "calculadora-bmc", "version": "4.0.0" }
+# → { "status": "ok", "service": "calculadora-bmc", "version": "5.0.0" }
 
 # Cotización de prueba
 curl -X POST http://localhost:3000/api/cotizar \
@@ -76,7 +76,7 @@ Vercel detecta automáticamente el `vercel.json` y despliega la API.
 
 La URL de producción tendrá el formato:
 ```
-https://calculadora-bmc.vercel.app
+https://calculadora-five-sand.vercel.app
 ```
 (o el nombre que elijas en el dashboard de Vercel)
 
@@ -84,7 +84,7 @@ https://calculadora-bmc.vercel.app
 
 ```bash
 curl https://TU-URL.vercel.app/health
-# → { "status": "ok", "service": "calculadora-bmc", "version": "4.0.0" }
+# → { "status": "ok", "service": "calculadora-bmc", "version": "5.0.0" }
 ```
 
 ---
@@ -158,14 +158,12 @@ El GPT debe llamar `POST /api/pdf` y devolver el archivo.
 ## Paso 8 — Mantenimiento futuro
 
 ### Actualizar precios
-Editar únicamente `calculadora/src/data/precios.json`.
-Este archivo es la **fuente única de verdad** — no hay precios en ningún otro lugar.
+Editar `calculadora/src/data/catalog_real.csv` (fuente única de precios y SKUs).
+El archivo es procesado automáticamente por `catalog.js` al arrancar la API.
 
-```json
-// calculadora/src/data/precios.json
-"ISODEC_EPS": {
-  "100": { "venta": 25.00, "web": 27.50, ... }
-}
+```csv
+# Columnas relevantes en catalog_real.csv:
+# sku(4), thickness_mm(6), sale_excl_vat(14), web_price_excl_vat(19)
 ```
 
 Después del cambio, re-deployar la API:
@@ -174,7 +172,7 @@ cd calculadora/ && vercel --prod
 ```
 
 ### Agregar nuevas familias de paneles
-1. Agregar en `calculadora/src/data/precios.json`
+1. Agregar filas correspondientes en `calculadora/src/data/catalog_real.csv`
 2. Agregar en `calculadora/src/engines/autoportancia.js` (tabla de luces máximas)
 3. Correr tests: `npm test`
 4. Re-deployar en Vercel
