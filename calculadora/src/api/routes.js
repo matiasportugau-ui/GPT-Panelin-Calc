@@ -162,7 +162,6 @@ router.post('/api/cotizar', (req, res) => {
       envio_usd: envioNum,
     });
 
-    const cotizacion = generarCotizacion(parsed.params);
     cacheCotizacion(cotizacion);
     res.json({ ok: true, cotizacion });
   } catch (err) {
@@ -192,13 +191,37 @@ router.post('/api/pdf', async (req, res) => {
       }
     } else if (req.body.escenario && req.body.familia) {
       const b = req.body;
+
+      // Validate required numeric fields before passing to engine
+      const espesorNum = Number(b.espesor_mm);
+      if (!b.espesor_mm && b.espesor_mm !== 0) {
+        return res.status(400).json({ ok: false, error: 'Campo requerido: espesor_mm' });
+      }
+      if (!Number.isFinite(espesorNum) || espesorNum <= 0) {
+        return res.status(400).json({ ok: false, error: 'espesor_mm debe ser un numero finito > 0' });
+      }
+
+      if (b.largo_m === undefined || b.largo_m === null || b.largo_m === '') {
+        return res.status(400).json({ ok: false, error: 'Campo requerido: largo_m' });
+      }
+      const largoNum = Number(b.largo_m);
+      if (!Number.isFinite(largoNum) || largoNum <= 0) {
+        return res.status(400).json({ ok: false, error: 'largo_m debe ser un numero finito > 0' });
+      }
+
+      const hasAncho = b.ancho_m !== undefined && b.ancho_m !== null && b.ancho_m !== '';
+      const hasCantP = b.cant_paneles !== undefined && b.cant_paneles !== null && b.cant_paneles !== '';
+      if (!hasAncho && !hasCantP) {
+        return res.status(400).json({ ok: false, error: 'Se requiere ancho_m o cant_paneles' });
+      }
+
       cotizacion = generarCotizacion({
         escenario: b.escenario,
         familia: b.familia,
-        espesor_mm: Number(b.espesor_mm),
-        ancho_m: b.ancho_m != null ? Number(b.ancho_m) : null,
-        cant_paneles: b.cant_paneles != null ? Number(b.cant_paneles) : null,
-        largo_m: Number(b.largo_m),
+        espesor_mm: espesorNum,
+        ancho_m: hasAncho ? Number(b.ancho_m) : null,
+        cant_paneles: hasCantP ? Number(b.cant_paneles) : null,
+        largo_m: largoNum,
         lista_precios: b.lista_precios || 'venta',
         apoyos: Number(b.apoyos || 0),
         num_aberturas: Number(b.num_aberturas || 0),
