@@ -1,0 +1,53 @@
+{
+  "version": "3.0",
+  "moneda": "USD",
+  "iva_incluido": false,
+  "iva_rate": 0.22,
+  "familias": {
+    "ISODEC_EPS": {
+      "100": { "venta": 25.00, "web": 27.50, "au_m": 1.12, "largo_min": 2.3, "largo_max": 14 },
+      "150": { "venta": 32.00, "web": 35.00, "au_m": 1.12, "largo_min": 2.3, "largo_max": 14 },
+      "200": { "venta": 40.00, "web": 44.00, "au_m": 1.12, "largo_min": 2.3, "largo_max": 14 },
+      "250": { "venta": 48.00, "web": 53.00, "au_m": 1.12, "largo_min": 2.3, "largo_max": 14 }
+    },
+    "ISODEC_PIR": {
+      "50":  { "venta": 22.00, "web": 24.00, "au_m": 1.12, "largo_min": 2.3, "largo_max": 14 },
+      "80":  { "venta": 28.00, "web": 31.00, "au_m": 1.12, "largo_min": 2.3, "largo_max": 14 },
+      "120": { "venta": 35.00, "web": 38.50, "au_m": 1.12, "largo_min": 2.3, "largo_max": 14 }
+    },
+    "ISOROOF_3G": {
+      "30":  { "venta": 18.00, "web": 20.00, "au_m": 1.10, "largo_min": 2.0, "largo_max": 12 },
+      "40":  { "venta": 21.00, "web": 23.00, "au_m": 1.10, "largo_min": 2.0, "largo_max": 12 },
+      "50":  { "venta": 24.00, "web": 26.50, "au_m": 1.10, "largo_min": 2.0, "largo_max": 12 },
+      "80":  { "venta": 30.00, "web": 33.00, "au_m": 1.10, "largo_min": 2.0, "largo_max": 12 },
+      "100": { "venta": 36.00, "web": 39.50, "au_m": 1.10, "largo_min": 2.0, "largo_max": 12 }
+    },
+    "ISOPANEL_EPS": {
+      "50":  { "venta": 20.00, "web": 22.00, "au_m": 1.00, "largo_min": 2.0, "largo_max": 12 },
+      "75":  { "venta": 24.00, "web": 26.50, "au_m": 1.00, "largo_min": 2.0, "largo_max": 12 },
+      "100": { "venta": 28.00, "web": 31.00, "au_m": 1.00, "largo_min": 2.0, "largo_max": 12 }
+    },
+    "ISOWALL_PIR": {
+      "50":  { "venta": 26.00, "web": 28.50, "au_m": 1.00, "largo_min": 2.0, "largo_max": 12 },
+      "80":  { "venta": 33.00, "web": 36.00, "au_m": 1.00, "largo_min": 2.0, "largo_max": 12 },
+      "100": { "venta": 40.00, "web": 44.00, "au_m": 1.00, "largo_min": 2.0, "largo_max": 12 }
+    }
+  },
+  "accesorios": {
+    "varilla_roscada_m": { "venta": 1.80, "web": 2.00, "unidad": "m" },
+    "tuerca_arandela_set": { "venta": 0.35, "web": 0.40, "unidad": "set" },
+    "caballete_unidad": { "venta": 2.50, "web": 2.75, "unidad": "und" },
+    "perfil_borde_m": { "venta": 4.20, "web": 4.60, "unidad": "m" },
+    "perfil_U_m": { "venta": 3.80, "web": 4.20, "unidad": "m" },
+    "perfil_K2_m": { "venta": 4.50, "web": 4.95, "unidad": "m" },
+    "perfil_G2_m": { "venta": 5.00, "web": 5.50, "unidad": "m" },
+    "esquinero_m": { "venta": 3.50, "web": 3.85, "unidad": "m" },
+    "sellador_310ml": { "venta": 6.50, "web": 7.15, "unidad": "cartucho" },
+    "tornillo_T2": { "venta": 0.25, "web": 0.28, "unidad": "und" },
+    "remache_POP": { "venta": 0.15, "web": 0.18, "unidad": "und" },
+    "kit_anclaje_H": { "venta": 1.20, "web": 1.32, "unidad": "und" },
+    "soporte_canalon": { "venta": 2.80, "web": 3.08, "unidad": "und" },
+    "barra_soporte_3m": { "venta": 8.50, "web": 9.35, "unidad": "barra" }
+  },
+  "envio_referencia_usd": 280
+}
