@@ -25,7 +25,7 @@ function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
   if (!sku || !Number.isFinite(cantidad) || cantidad <= 0) return 0;
   const acc = getAccessoryInfo(sku, lista_precios);
   const precio_unit = acc.precio;
-  const subtotal = Math.round(qty * precio_unit * 100) / 100;
+  const subtotal = Math.round(cantidad * precio_unit * 100) / 100;
   items.push({ sku, descripcion, cantidad, unidad, precio_unit, subtotal });
   return subtotal;
 }
