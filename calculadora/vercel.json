@@ -1,15 +1,12 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "src/api/server.js",
-      "use": "@vercel/node"
+  "functions": {
+    "src/api/server.js": {
+      "maxDuration": 30,
+      "includeFiles": "src/data/catalog_real.csv"
     }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "src/api/server.js"
-    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/src/api/server.js" }
   ]
 }
