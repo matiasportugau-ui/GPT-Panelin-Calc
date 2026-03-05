@@ -1,0 +1,779 @@
+{
+  "_meta": {
+    "sistema": "Calculadora Panelin BMC Uruguay",
+    "version": "5.1.0",
+    "fecha": "2026-03-05",
+    "moneda": "USD",
+    "iva_rate": 0.22,
+    "proposito": "Especificacion estructurada completa del sistema de calculo. Usable para validacion de inputs, generacion de casos de prueba, analisis de combinaciones validas y auditoria de formulas.",
+    "formato": "JSON Calculation Flow Specification (CFS). Cada nodo define: tipo, valores validos, dependencias, formulas y condiciones."
+  },
+
+  "parametros_entrada": {
+    "escenario": {
+      "tipo": "enum",
+      "requerido": true,
+      "valores": ["solo_techo", "solo_fachada", "techo_fachada", "camara_frigorifica"],
+      "descripcion": "Define cuantas secciones se calculan y como se arman.",
+      "secciones_generadas": {
+        "solo_techo":          ["techo"],
+        "solo_fachada":        ["pared"],
+        "techo_fachada":       ["techo", "pared"],
+        "camara_frigorifica":  ["techo", "pared_frontal_posterior", "pared_lateral"]
+      }
+    },
+    "familia": {
+      "tipo": "enum",
+      "requerido": true,
+      "valores": ["ISOROOF_3G","ISOROOF_FOIL","ISOROOF_PLUS","ISODEC_PIR","ISODEC_EPS","ISOPANEL_EPS","ISOWALL_PIR","ISOFRIG_PIR"]
+    },
+    "espesor_mm": {
+      "tipo": "integer",
+      "requerido": true,
+      "descripcion": "Debe ser un valor valido para la familia seleccionada. Ver tabla familias."
+    },
+    "ancho_m": {
+      "tipo": "float",
+      "requerido": "alternativo_a:cant_paneles",
+      "restriccion": "mayor_que_0",
+      "descripcion": "Ancho del techo o pared. El sistema calcula cantP = ceil(ancho_m / au_m)."
+    },
+    "cant_paneles": {
+      "tipo": "float",
+      "requerido": "alternativo_a:ancho_m",
+      "restriccion": "mayor_que_0",
+      "descripcion": "Cantidad exacta de paneles. cantP = ceil(cant_paneles)."
+    },
+    "largo_m": {
+      "tipo": "float",
+      "requerido": true,
+      "restriccion": "mayor_que_0",
+      "descripcion": "Largo del techo o altura de la pared. Afecta validacion lmin/lmax y autoportancia."
+    },
+    "lista_precios": {
+      "tipo": "enum",
+      "requerido": false,
+      "default": "venta",
+      "valores": ["venta", "web"],
+      "descripcion": "Selecciona columna de precio en el catalogo para todos los items."
+    },
+    "apoyos": {
+      "tipo": "integer",
+      "requerido": false,
+      "default": 0,
+      "restriccion": "mayor_o_igual_0",
+      "descripcion": "Apoyos intermedios. Con apoyos > 0: luz_real = largo_m / (apoyos + 1). Afecta fijacion varilla_tuerca."
+    },
+    "estructura": {
+      "tipo": "enum",
+      "requerido": false,
+      "default": "metal",
+      "valores": ["metal", "hormigon", "mixto"],
+      "descripcion": "En techo varilla_tuerca: hormigon agrega tacos expansivos. En pared: metal/mixto incluye TMOME+ARATRAP."
+    },
+    "tiene_cumbrera": {
+      "tipo": "boolean",
+      "requerido": false,
+      "default": false,
+      "aplica_a": "techo",
+      "descripcion": "Si true: agrega accesorio de cumbrera. Solo para familias con sistema de gotero."
+    },
+    "tiene_canalon": {
+      "tipo": "boolean",
+      "requerido": false,
+      "default": false,
+      "aplica_a": "techo",
+      "descripcion": "Si true: agrega canalon y soporte. Solo para familias con sistema de gotero y SKU de canalon definido."
+    },
+    "tipo_gotero_frontal": {
+      "tipo": "enum",
+      "requerido": false,
+      "default": "liso",
+      "valores": ["liso", "greca"],
+      "aplica_a": "techo",
+      "descripcion": "Solo para ISOROOF_3G/FOIL/PLUS. greca usa SKU universal GFCGR30."
+    },
+    "color": {
+      "tipo": "string",
+      "requerido": false,
+      "descripcion": "Solo para validacion y warnings. No afecta calculo. Ver tabla colores."
+    },
+    "envio_usd": {
+      "tipo": "float",
+      "requerido": false,
+      "descripcion": "Si se provee, se incluye como campo separado en la cotizacion. No afecta materiales ni IVA."
+    },
+    "aberturas": {
+      "tipo": "array",
+      "item_schema": { "ancho": "float", "alto": "float", "cant": "integer" },
+      "requerido": false,
+      "default": [],
+      "aplica_a": "pared",
+      "descripcion": "Area total descontada = sum(ancho * alto * cant). Afecta areaNeta y costo_paneles en pared."
+    },
+    "num_esq_ext": {
+      "tipo": "integer",
+      "requerido": false,
+      "default": 0,
+      "aplica_a": "pared",
+      "descripcion": "Cantidad de esquinas exteriores. Genera items ESQ-EXT."
+    },
+    "num_esq_int": {
+      "tipo": "integer",
+      "requerido": false,
+      "default": 0,
+      "aplica_a": "pared",
+      "descripcion": "Cantidad de esquinas interiores. Genera items ESQ-INT."
+    },
+    "incl_k2": {
+      "tipo": "boolean",
+      "requerido": false,
+      "default": true,
+      "aplica_a": "pared",
+      "descripcion": "Si true Y cantP > 1: incluye perfiles K2 de junta vertical."
+    },
+    "incl_5852": {
+      "tipo": "boolean",
+      "requerido": false,
+      "default": false,
+      "aplica_a": "pared",
+      "descripcion": "Si true: incluye angulo aluminio 5852 (piezas de 6.8m)."
+    }
+  },
+
+  "familias": {
+    "ISOROOF_3G": {
+      "au_m": 1.10,
+      "uso_tipico": "techo",
+      "sist_fijacion_techo": "caballete_tornillo",
+      "tiene_gotero": true,
+      "espesores_disponibles": [30, 40, 50, 80, 100],
+      "skus": { "30": "IROOF30", "40": "IROOF40", "50": "IROOF50", "80": "IROOF80", "100": "IROOF100" },
+      "precio_fuente": "csv",
+      "largo_m": { "min": 3.5, "max": 8.5 },
+      "colores": {
+        "Terracota": {},
+        "Gris": {},
+        "Rojo": {},
+        "Blanco": { "minArea_m2": 500, "nota": "Minimo 500 m2 por pedido" }
+      },
+      "luces_max_m": { "30": 2.5, "40": 3.0, "50": 3.5, "80": 4.5, "100": 5.0 }
+    },
+    "ISOROOF_FOIL": {
+      "au_m": 1.10,
+      "uso_tipico": "techo",
+      "sist_fijacion_techo": "caballete_tornillo",
+      "tiene_gotero": true,
+      "espesores_disponibles": [30, 50],
+      "skus": { "30": "IAGRO30", "50": "IAGRO50" },
+      "precio_fuente": "csv",
+      "largo_m": { "min": 3.5, "max": 8.5 },
+      "colores": { "Blanco": {} },
+      "luces_max_m": { "30": 2.5, "50": 3.5 }
+    },
+    "ISOROOF_PLUS": {
+      "au_m": 1.10,
+      "uso_tipico": "techo",
+      "sist_fijacion_techo": "caballete_tornillo",
+      "tiene_gotero": true,
+      "espesores_disponibles": [50, 80],
+      "skus": { "50": "IROOF50-PLS", "80": "IROOF80-PLS" },
+      "precio_fuente": "csv",
+      "largo_m": { "min": 3.5, "max": 8.5 },
+      "colores": { "Blanco": {}, "Gris": {} },
+      "luces_max_m": { "50": 3.5, "80": 4.5 }
+    },
+    "ISODEC_PIR": {
+      "au_m": 1.12,
+      "uso_tipico": "techo",
+      "sist_fijacion_techo": "varilla_tuerca",
+      "tiene_gotero": true,
+      "espesores_disponibles": [50, 80],
+      "skus": { "50": "ISD50PIR", "80": "ISD80PIR" },
+      "precio_fuente": "csv",
+      "largo_m": { "min": 3.5, "max": 14 },
+      "colores": { "Blanco": {}, "Gris": {} },
+      "luces_max_m": { "50": 3.5, "80": 4.5 }
+    },
+    "ISODEC_EPS": {
+      "au_m": 1.12,
+      "uso_tipico": "techo",
+      "sist_fijacion_techo": "varilla_tuerca",
+      "tiene_gotero": true,
+      "espesores_disponibles": [100, 150, 200, 250],
+      "skus": { "100": "ISODEC_EPS_100", "150": "ISODEC_EPS_150", "200": "ISODEC_EPS_200", "250": "ISODEC_EPS_250" },
+      "precio_fuente": "hardcoded_panel_defs",
+      "precios_venta_m2": { "100": 46.07, "150": 51.50, "200": 57.00, "250": 62.50 },
+      "largo_m": { "min": 2.3, "max": 14 },
+      "colores": {
+        "Blanco": {},
+        "Gris":  { "colMax_mm": 150, "nota": "Solo 100-150mm, +20 dias habiles" },
+        "Rojo":  { "colMax_mm": 150, "nota": "Solo 100-150mm, +20 dias habiles" }
+      },
+      "luces_max_m": { "100": 4.5, "150": 5.5, "200": 6.5, "250": 7.5 }
+    },
+    "ISOPANEL_EPS": {
+      "au_m": 1.00,
+      "uso_tipico": "pared",
+      "sist_fijacion_techo": "tmome",
+      "tiene_gotero": false,
+      "espesores_disponibles": [50, 100, 150, 200, 250],
+      "skus": { "50": "ISD50EPS", "100": "ISD100EPS", "150": "ISD150EPS", "200": "ISD200EPS", "250": "ISD250EPS" },
+      "precio_fuente": "csv",
+      "largo_m": { "min": 2.3, "max": 14 },
+      "colores": { "Blanco": {}, "Gris": {}, "Rojo": {} },
+      "luces_max_m": { "50": 3.0, "100": 5.0, "150": 6.0, "200": 7.0, "250": 7.5 }
+    },
+    "ISOWALL_PIR": {
+      "au_m": 1.00,
+      "uso_tipico": "pared",
+      "sist_fijacion_techo": "tmome",
+      "tiene_gotero": false,
+      "espesores_disponibles": [50, 80, 100],
+      "skus": { "50": "IW50", "80": "IW80", "100": "IW100" },
+      "precio_fuente": "csv",
+      "largo_m": { "min": 3.5, "max": 14 },
+      "colores": { "Blanco": {}, "Gris": {} },
+      "luces_max_m": { "50": 3.5, "80": 4.5, "100": 5.5 }
+    },
+    "ISOFRIG_PIR": {
+      "au_m": 1.00,
+      "uso_tipico": "camara_y_pared",
+      "sist_fijacion_techo": "tmome",
+      "tiene_gotero": false,
+      "espesores_disponibles": [40, 60, 80, 100, 150],
+      "skus": { "40": "IF40", "60": "IF60 - IFSL60", "80": "IF80 - IFSL80", "100": "IF100 - IFSL100", "150": "IF150 - IFSL150" },
+      "precio_fuente": "csv",
+      "largo_m": { "min": 2.3, "max": 14 },
+      "colores": { "Blanco": {} },
+      "luces_max_m": { "40": 3.0, "60": 3.5, "80": 4.5, "100": 5.0, "150": 6.0 }
+    }
+  },
+
+  "sistemas_fijacion": {
+    "varilla_tuerca": {
+      "familias": ["ISODEC_EPS", "ISODEC_PIR"],
+      "params": {
+        "laterales_por_punto": 2,
+        "intervalo_largo_m": 2.5,
+        "varillas_por_punto": 0.25,
+        "apoyos_minimos_default": 2
+      },
+      "formulas": {
+        "apoyosReales": "apoyos > 0 ? apoyos : apoyos_minimos_default",
+        "ptosFij": "ceil(cantP * apoyosReales * laterales_por_punto + largo_m * 2 / intervalo_largo_m)",
+        "cantVarillas": "ceil(ptosFij * varillas_por_punto)",
+        "cantTuercas": "cantVarillas * 2",
+        "cantArcCarr": "cantVarillas * 2",
+        "cantArPP": "cantVarillas * 2",
+        "cantTacos": "ptosFij — SOLO si estructura = 'hormigon'"
+      },
+      "items": [
+        { "sku": "VARILLA38",  "formula": "cantVarillas", "unidad": "unid",  "condicion": "siempre" },
+        { "sku": "TUERCA38",   "formula": "cantTuercas",  "unidad": "unid",  "condicion": "siempre" },
+        { "sku": "ARCA38",     "formula": "cantArcCarr",  "unidad": "unid",  "condicion": "siempre" },
+        { "sku": "ARAPP",      "formula": "cantArPP",     "unidad": "unid",  "condicion": "siempre" },
+        { "sku": "TACEXP38",   "formula": "ptosFij",      "unidad": "unid",  "condicion": "estructura == 'hormigon'" }
+      ]
+    },
+    "caballete_tornillo": {
+      "familias": ["ISOROOF_3G", "ISOROOF_FOIL", "ISOROOF_PLUS"],
+      "params": {
+        "tramos_por_panel": 3,
+        "paso_apoyo_m": 2.9,
+        "intervalo_perimetro_m": 0.30
+      },
+      "formulas": {
+        "cantCaballetes": "ceil(cantP * 3 * (largo_m / 2.9 + 1) + largo_m * 2 / 0.30)",
+        "cajasAgujas": "ceil(cantCaballetes * 2 / 100)"
+      },
+      "items": [
+        { "sku": "CABALLETE",  "formula": "cantCaballetes", "unidad": "unid",  "condicion": "siempre" },
+        { "sku": "TORN_AGUJA", "formula": "cajasAgujas",    "unidad": "caja",  "condicion": "siempre" }
+      ]
+    },
+    "tmome": {
+      "familias": ["ISOPANEL_EPS", "ISOWALL_PIR", "ISOFRIG_PIR"],
+      "params_techo": { "tornillos_por_m2": 6 },
+      "params_pared": { "tornillos_por_m2": 5.5 },
+      "formulas_techo": {
+        "cantTornillos": "ceil(areaRaw * 6)"
+      },
+      "formulas_pared": {
+        "cantTornillos": "ceil(areaNeta * 5.5)",
+        "condicion": "estructura == 'metal' OR estructura == 'mixto'"
+      },
+      "items": [
+        { "sku": "TMOME",   "formula": "cantTornillos", "unidad": "und" },
+        { "sku": "ARATRAP", "formula": "cantTornillos", "unidad": "und" }
+      ]
+    }
+  },
+
+  "gotero_skus": {
+    "ISOROOF_3G": {
+      "frontal":  { "30": "GFS30", "40": "GFS30", "50": "GFS50", "80": "GFS80", "100": "GFS80" },
+      "superior": { "30": "GFSUP30", "40": "GFSUP40", "50": "GFSUP50", "80": "GFSUP80", "100": "GFSUP80" },
+      "lateral":  { "30": "GL30", "40": "GL40", "50": "GL50", "80": "GL80", "100": "GL80" },
+      "canalon":  { "30": "CD30", "40": "CD30", "50": "CD50", "80": "CD80", "100": "CD80" },
+      "cumbrera":  "CUMROOF3M",
+      "soporte_canalon": "SOPCAN3M"
+    },
+    "ISOROOF_FOIL": {
+      "frontal":  { "30": "GFS30", "50": "GFS50" },
+      "superior": { "30": "GFSUP30", "50": "GFSUP50" },
+      "lateral":  { "30": "GL30", "50": "GL50" },
+      "canalon":  { "30": "CD30", "50": "CD50" },
+      "cumbrera":  "CUMROOF3M",
+      "soporte_canalon": "SOPCAN3M"
+    },
+    "ISOROOF_PLUS": {
+      "frontal":  { "50": "GFS50", "80": "GFS80" },
+      "superior": { "50": "GFSUP50", "80": "GFSUP80" },
+      "lateral":  { "50": "GL50", "80": "GL80" },
+      "canalon":  { "50": "CD50", "80": "CD80" },
+      "cumbrera":  "CUMROOF3M",
+      "soporte_canalon": "SOPCAN3M"
+    },
+    "ISODEC_PIR": {
+      "frontal":  { "50": "GF80DC", "80": "GF120DC" },
+      "superior": { "50": "GSDECAM50", "80": "GSDECAM80" },
+      "lateral":  { "50": "GL80DC", "80": "GL120DC" },
+      "canalon":  { "50": "CAN.ISDC120" },
+      "cumbrera":  "6847",
+      "soporte_canalon": "6805"
+    },
+    "ISODEC_EPS": {
+      "frontal":  { "100": "6838", "150": "6839", "200": "6840", "250": "6841" },
+      "superior": "6828",
+      "lateral":  { "100": "6842", "150": "6843", "200": "6844", "250": "6845" },
+      "canalon":  { "100": "6801", "150": "6802", "200": "6803", "250": "6804" },
+      "cumbrera":  "6847",
+      "soporte_canalon": "6805"
+    },
+    "_longitudes_pieza_m": {
+      "frontal_length":  3.03,
+      "superior_length": 3.03,
+      "superior_length_EPS": 3.00,
+      "lateral_length":  3.00,
+      "canalon_length":  3.03,
+      "soporte_length":  3.00
+    }
+  },
+
+  "calculo_techo": {
+    "descripcion": "Secuencia de calculo del BOM para una seccion de techo.",
+    "fase_1_cantidades": {
+      "paso_1_dimensiones": {
+        "fuente": "PANEL_DEFS en catalog.js (hardcoded, NO del CSV)",
+        "variables_producidas": ["panelSku", "panelName", "au_m", "precio_m2"],
+        "formulas": {
+          "cantP_desde_ancho":   "ceil(ancho_m / au_m)",
+          "cantP_desde_paneles": "ceil(cant_paneles)",
+          "anchoEfectivo":       "cantP * au_m",
+          "areaRaw":             "cantP * au_m * largo_m",
+          "area_m2":             "round(areaRaw, 2)"
+        }
+      },
+      "paso_2_gotero": {
+        "condicion_habilitante": "familia IN ['ISOROOF_3G','ISOROOF_FOIL','ISOROOF_PLUS','ISODEC_PIR','ISODEC_EPS']",
+        "items": [
+          {
+            "id": "gotero_frontal",
+            "condicion": "tiene_gotero",
+            "sku_logica": "tipo_gotero_frontal=='greca' AND familia IN ISOROOF_* ? 'GFCGR30' : gotero_skus[familia].frontal[espesor]",
+            "formula_cantidad": "ceil(anchoEfectivo / 3.03)",
+            "unidad": "pieza"
+          },
+          {
+            "id": "gotero_superior",
+            "condicion": "tiene_gotero",
+            "sku_logica": "familia=='ISODEC_EPS' ? '6828' : gotero_skus[familia].superior[espesor]",
+            "formula_cantidad_isoroof_pir": "ceil(anchoEfectivo / 3.03)",
+            "formula_cantidad_eps":         "ceil(anchoEfectivo / 3.00)",
+            "unidad": "pieza"
+          },
+          {
+            "id": "gotero_lateral",
+            "condicion": "tiene_gotero",
+            "sku_logica": "gotero_skus[familia].lateral[espesor]",
+            "formula_cantidad": "ceil(largo_m / 3.00) * 2",
+            "unidad": "pieza"
+          },
+          {
+            "id": "cumbrera",
+            "condicion": "tiene_gotero AND tiene_cumbrera==true",
+            "sku_logica": "gotero_skus[familia].cumbrera",
+            "formula_cantidad": "ceil(anchoEfectivo / 3.00)",
+            "unidad": "pieza"
+          },
+          {
+            "id": "canalon",
+            "condicion": "tiene_gotero AND tiene_canalon==true AND gotero_skus[familia].canalon[espesor] != null",
+            "sku_logica": "gotero_skus[familia].canalon[espesor]",
+            "formula_cantidad": "ceil(anchoEfectivo / 3.03)",
+            "unidad": "pieza"
+          },
+          {
+            "id": "soporte_canalon",
+            "condicion": "misma_que_canalon",
+            "sku_logica": "gotero_skus[familia].soporte_canalon",
+            "formula_cantidad": "ceil(anchoEfectivo / 1.50)",
+            "unidad": "pieza"
+          }
+        ]
+      },
+      "paso_3_fijacion": {
+        "sist": "SIST_FIJACION_TECHO[familia]",
+        "ver_nodo": "sistemas_fijacion"
+      },
+      "paso_4_selladores": {
+        "items": [
+          {
+            "id": "cinta_butilo",
+            "sku": "C.But.",
+            "formula": "max(1, ceil((cantP - 1) * largo_m / 22.5))",
+            "unidad": "rollo",
+            "condicion": "siempre"
+          },
+          {
+            "id": "silicona",
+            "sku": "Bromplast",
+            "formula": "ceil(cantP * 0.5)",
+            "unidad": "cartucho",
+            "condicion": "siempre"
+          }
+        ]
+      }
+    },
+    "fase_2_precios": {
+      "panel": "precio_m2 (de getPanelInfo) * areaRaw",
+      "accesorios": "getAccessoryInfo(sku, lista_precios).precio * cantidad"
+    },
+    "output": {
+      "tipo": "techo",
+      "campos_geometricos": ["familia","espesor_mm","ancho_m","largo_m","area_m2","cant_paneles","sist_fijacion"],
+      "items": "array de {sku, descripcion, cantidad, unidad, precio_unit, subtotal}",
+      "subtotal": "suma de todos los subtotales de items"
+    }
+  },
+
+  "calculo_pared": {
+    "descripcion": "Secuencia de calculo del BOM para una seccion de pared o fachada.",
+    "fase_1_cantidades": {
+      "paso_1_dimensiones": {
+        "fuente": "PANEL_DEFS (mismo que techo)",
+        "formulas": {
+          "cantP":           "ceil(ancho_m / au_m) o ceil(cant_paneles)",
+          "anchoEfectivo":   "cantP * au_m",
+          "areaBruta":       "round(cantP * au_m * largo_m, 2)",
+          "areaAberturas":   "sum(ab.ancho * ab.alto * ab.cant) para cada abertura",
+          "areaNeta":        "max(0, areaBruta - areaAberturas)"
+        }
+      },
+      "paso_2_panel_y_perfiles": {
+        "items": [
+          {
+            "id": "panel",
+            "formula_costo": "areaNeta * precio_m2",
+            "nota": "En pared se cobra area NETA, no bruta"
+          },
+          {
+            "id": "perfil_u",
+            "condicion": "PERFIL_U_SKU[espesor] != null",
+            "sku_logica": "PERFIL_U_SKU[espesor]: 40-60→PU50MM, 80-100→PU100MM, 150→PU150MM, 200→PU200MM, 250→PU250MM",
+            "formulas": {
+              "mlPerfilU": "2 * anchoEfectivo",
+              "cantPU":    "ceil(mlPerfilU / 3.0)"
+            },
+            "unidad": "pieza"
+          },
+          {
+            "id": "perfil_k2",
+            "condicion": "incl_k2==true AND cantP > 1",
+            "sku": "K2",
+            "formula": "( cantP - 1 ) * ceil(largo_m / 3.0)",
+            "unidad": "pieza"
+          },
+          {
+            "id": "esquinero_ext",
+            "condicion": "num_esq_ext > 0",
+            "sku": "ESQ-EXT",
+            "formula": "num_esq_ext * ceil(largo_m / 3.0)",
+            "unidad": "pieza"
+          },
+          {
+            "id": "esquinero_int",
+            "condicion": "num_esq_int > 0",
+            "sku": "ESQ-INT",
+            "formula": "num_esq_int * ceil(largo_m / 3.0)",
+            "unidad": "pieza"
+          },
+          {
+            "id": "angulo_5852",
+            "condicion": "incl_5852==true",
+            "sku": "PLECHU98",
+            "formula": "ceil(anchoEfectivo / 6.8)",
+            "unidad": "pieza"
+          }
+        ]
+      },
+      "paso_3_fijaciones": {
+        "items": [
+          {
+            "id": "tmome_aratrap",
+            "condicion": "estructura IN ['metal','mixto']",
+            "formula": "ceil(areaNeta * 5.5)",
+            "skus": ["TMOME","ARATRAP"],
+            "unidad": "und"
+          },
+          {
+            "id": "anclaje_h",
+            "condicion": "siempre",
+            "sku": "ANCLAJE_H",
+            "formula": "ceil(anchoEfectivo / 0.30)",
+            "unidad": "unid"
+          },
+          {
+            "id": "remaches_rpop",
+            "condicion": "siempre",
+            "sku": "RPOP",
+            "formulas": {
+              "cantRemaches":    "cantP * 2",
+              "cantCajasRPOP":   "max(1, ceil(cantRemaches / 1000))"
+            },
+            "unidad": "caja"
+          }
+        ]
+      },
+      "paso_4_selladores": {
+        "items": [
+          {
+            "id": "cinta_butilo",
+            "sku": "C.But.",
+            "formula": "max(1, ceil((cantP - 1) * largo_m / 22.5))",
+            "unidad": "rollo"
+          },
+          {
+            "id": "silicona",
+            "sku": "Bromplast",
+            "formulas": {
+              "mlJuntas":    "(cantP - 1) * largo_m + anchoEfectivo * 2",
+              "cantSilicona": "ceil(mlJuntas / 8)"
+            },
+            "unidad": "cartucho",
+            "nota": "Formula por ML de junta — mas precisa que la de techo"
+          }
+        ]
+      }
+    },
+    "output": {
+      "tipo": "pared | pared_frontal_posterior | pared_lateral",
+      "campos_geometricos": ["familia","espesor_mm","ancho_m","largo_m","area_bruta_m2","area_aberturas_m2","area_neta_m2","cant_paneles"],
+      "items": "array de {sku, descripcion, cantidad, unidad, precio_unit, subtotal}",
+      "subtotal": "suma de todos los subtotales de items"
+    }
+  },
+
+  "escenario_camara_frigorifica": {
+    "descripcion": "Caso especial. Altura fija = 3m. Genera 3 secciones.",
+    "secciones": [
+      {
+        "tipo": "techo",
+        "parametros": "todos los provistos por el usuario"
+      },
+      {
+        "tipo": "pared_frontal_posterior",
+        "parametros": {
+          "ancho_m": "el mismo ancho_m o cant_paneles del usuario",
+          "largo_m": 3,
+          "nota": "Representa las dos paredes frontales/posteriores del recinto"
+        }
+      },
+      {
+        "tipo": "pared_lateral",
+        "parametros": {
+          "ancho_m": "largo_m del usuario (el lado largo del recinto)",
+          "cant_paneles": "ignorado — usa ancho_m = largo_m del recinto",
+          "largo_m": 3,
+          "nota": "Representa las dos paredes laterales del recinto"
+        }
+      }
+    ]
+  },
+
+  "validaciones": [
+    {
+      "id": "escenario_valido",
+      "tipo": "fatal",
+      "condicion": "escenario NOT IN escenarios_validos",
+      "mensaje": "Escenario invalido"
+    },
+    {
+      "id": "ancho_o_paneles",
+      "tipo": "fatal",
+      "condicion": "ancho_m == null AND cant_paneles == null",
+      "mensaje": "Se requiere ancho_m o cant_paneles"
+    },
+    {
+      "id": "no_ambos_anchos",
+      "tipo": "fatal",
+      "condicion": "ancho_m != null AND cant_paneles != null",
+      "mensaje": "No se pueden enviar simultaneamente ancho_m y cant_paneles"
+    },
+    {
+      "id": "largo_positivo",
+      "tipo": "fatal",
+      "condicion": "largo_m <= 0 OR NOT isFinite(largo_m)"
+    },
+    {
+      "id": "largo_min",
+      "tipo": "warning",
+      "condicion": "largo_m < panel_largos[familia].min",
+      "mensaje": "largo por debajo del minimo para la familia"
+    },
+    {
+      "id": "largo_max",
+      "tipo": "warning",
+      "condicion": "largo_m > panel_largos[familia].max",
+      "mensaje": "largo supera el maximo para la familia"
+    },
+    {
+      "id": "color_disponible",
+      "tipo": "warning",
+      "condicion": "color != null AND color NOT IN colores[familia]"
+    },
+    {
+      "id": "color_espesor",
+      "tipo": "warning",
+      "condicion": "colores[familia][color].colMax_mm != null AND espesor_mm > colMax_mm"
+    },
+    {
+      "id": "autoportancia",
+      "tipo": "warning",
+      "condicion": "luz_real > LUCES_MAXIMAS[familia][espesor_mm]",
+      "formula_luz": "apoyos > 0 ? largo_m / (apoyos + 1) : largo_m"
+    }
+  ],
+
+  "accesorios_hardcoded": {
+    "VARILLA38":  { "nombre": "Varilla roscada 3/8\"",           "venta": 3.12,  "web": 3.64,  "unidad": "unid" },
+    "TUERCA38":   { "nombre": "Tuerca 3/8\" galv.",               "venta": 0.12,  "web": 0.07,  "unidad": "unid" },
+    "ARCA38":     { "nombre": "Arandela carrocero 3/8\"",         "venta": 1.68,  "web": 0.64,  "unidad": "unid" },
+    "ARAPP":      { "nombre": "Tortuga PVC (arandela PP)",        "venta": 1.27,  "web": 1.48,  "unidad": "unid" },
+    "TACEXP38":   { "nombre": "Taco expansivo 3/8\"",             "venta": 0.96,  "web": 1.12,  "unidad": "unid" },
+    "CABALLETE":  { "nombre": "Caballete trapezoidal",            "venta": 0.50,  "web": 0.46,  "unidad": "unid" },
+    "TORN_AGUJA": { "nombre": "Tornillo aguja 5\" (x100)",        "venta": 17.00, "web": 17.00, "unidad": "x100" },
+    "ANCLAJE_H":  { "nombre": "Kit anclaje H°",                  "venta": 0.09,  "web": 0.03,  "unidad": "unid" },
+    "K2":         { "nombre": "Perfil K2 junta interior",         "venta": 8.59,  "web": 10.48, "unidad": "pieza","largo_m": 3.0 },
+    "ESQ-EXT":    { "nombre": "Esquinero exterior",               "venta": 8.59,  "web": 10.48, "unidad": "pieza","largo_m": 3.0 },
+    "ESQ-INT":    { "nombre": "Esquinero interior",               "venta": 8.59,  "web": 10.48, "unidad": "pieza","largo_m": 3.0 },
+    "G2-100":     { "nombre": "Perfil G2 100mm",                  "venta": 15.34, "web": 18.72, "unidad": "pieza","largo_m": 3.0 },
+    "G2-150":     { "nombre": "Perfil G2 150mm",                  "venta": 17.61, "web": 21.49, "unidad": "pieza","largo_m": 3.0 },
+    "G2-200":     { "nombre": "Perfil G2 200mm",                  "venta": 21.13, "web": 25.78, "unidad": "pieza","largo_m": 3.0 },
+    "G2-250":     { "nombre": "Perfil G2 250mm",                  "venta": 21.30, "web": 25.99, "unidad": "pieza","largo_m": 3.0 },
+    "PLECHU98":   { "nombre": "Angulo aluminio 5852 6.8m",        "venta": 51.84, "web": 63.24, "unidad": "pieza","largo_m": 6.8 },
+    "GFCGR30":    { "nombre": "Gotero frontal greca ISOROOF",     "venta": 17.99, "web": 19.38, "unidad": "pieza","largo_m": 3.03 },
+    "MEMBRANA":   { "nombre": "Membrana autoadhesiva 30cmx10m",   "venta": 16.62, "web": 20.28, "unidad": "rollo" },
+    "ESPUMA_PU":  { "nombre": "Espuma poliuretano 750cm3",        "venta": 25.46, "web": 31.06, "unidad": "unid" },
+    "GLDCAM50":   { "nombre": "Gotero lateral camara 50mm",       "venta": 22.32, "web": 27.23, "unidad": "pieza","largo_m": 3.0 },
+    "GLDCAM80":   { "nombre": "Gotero lateral camara 80mm",       "venta": 25.11, "web": 30.63, "unidad": "pieza","largo_m": 3.0 }
+  },
+
+  "output_schema": {
+    "cotizacion_id": "uuid_v4",
+    "fecha": "YYYY-MM-DD",
+    "escenario": "string",
+    "familia": "string",
+    "espesor_mm": "number",
+    "color": "string | omitido_si_no_se_provee",
+    "lista_precios": "venta | web",
+    "secciones": [
+      {
+        "tipo": "techo | pared | pared_frontal_posterior | pared_lateral",
+        "familia": "string",
+        "espesor_mm": "number",
+        "ancho_m": "number — anchoEfectivo calculado",
+        "largo_m": "number",
+        "area_m2": "number — solo techo",
+        "area_bruta_m2": "number — solo pared",
+        "area_aberturas_m2": "number — solo pared",
+        "area_neta_m2": "number — solo pared",
+        "cant_paneles": "number",
+        "sist_fijacion": "string — solo techo",
+        "items": [
+          {
+            "sku": "string",
+            "descripcion": "string",
+            "cantidad": "number",
+            "unidad": "panel | pieza | unid | und | caja | rollo | cartucho | x100",
+            "precio_unit": "number — USD sin IVA",
+            "subtotal": "number — round(cantidad * precio_unit, 2)"
+          }
+        ],
+        "subtotal": "number — suma de subtotales de items"
+      }
+    ],
+    "resumen": {
+      "subtotal_sin_iva": "number",
+      "iva_22": "number — subtotal_sin_iva * 0.22",
+      "total_con_iva": "number",
+      "moneda": "USD"
+    },
+    "warnings": ["string"],
+    "nota": "string",
+    "envio_usd": "number | omitido_si_no_se_provee"
+  },
+
+  "combinaciones_validas_totales": {
+    "descripcion": "Numero de combinaciones posibles de inputs discretos (excluyendo valores continuos de ancho y largo).",
+    "escenarios": 4,
+    "familias_x_espesores": {
+      "ISOROOF_3G":   5,
+      "ISOROOF_FOIL": 2,
+      "ISOROOF_PLUS": 2,
+      "ISODEC_PIR":   2,
+      "ISODEC_EPS":   4,
+      "ISOPANEL_EPS": 5,
+      "ISOWALL_PIR":  3,
+      "ISOFRIG_PIR":  5,
+      "total": 28
+    },
+    "lista_precios": 2,
+    "estructura": 3,
+    "tipo_gotero_frontal": 2,
+    "tiene_cumbrera": 2,
+    "tiene_canalon": 2,
+    "incl_k2": 2,
+    "incl_5852": 2,
+    "nota": "El espacio de combinaciones discretas (sin dimensiones continuas ni aberturas) es del orden de escenarios * familias_espesores * lista_precios * estructura * flags = 4 * 28 * 2 * 3 * 2^5 = aprox 21504 combinaciones. Con apoyos y aberturas el espacio es infinito (parametros continuos)."
+  },
+
+  "diferencias_clave_techo_vs_pared": [
+    {
+      "aspecto": "Area cobrada",
+      "techo": "area BRUTA (cantP * au_m * largo_m)",
+      "pared": "area NETA (bruta - aberturas)"
+    },
+    {
+      "aspecto": "Formula silicona",
+      "techo": "cantP * 0.5 cartuchos/panel (fija por panel)",
+      "pared": "mlJuntas / 8ml_por_cartucho (por metros lineales de junta)"
+    },
+    {
+      "aspecto": "Sistema fijacion",
+      "techo": "3 ramas segun familia (varilla_tuerca / caballete / tmome)",
+      "pared": "siempre tmome + anclaje_H + remaches (estructura afecta solo tmome)"
+    },
+    {
+      "aspecto": "Gotero",
+      "techo": "hasta 6 items de gotero/canalon/cumbrera",
+      "pared": "no tiene gotero"
+    },
+    {
+      "aspecto": "Perfiles de junta",
+      "techo": "no tiene perfiles de junta",
+      "pared": "Perfil U (soleras) + K2 (juntas verticales)"
+    }
+  ]
+}
