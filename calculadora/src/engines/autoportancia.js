@@ -5,11 +5,16 @@
  * Basada en especificaciones técnicas Panelin BMC Uruguay.
  */
 const LUCES_MAXIMAS = {
-  ISODEC_EPS: { 100: 4.5, 150: 5.5, 200: 6.5, 250: 7.5 },
-  ISODEC_PIR: { 50: 3.5, 80: 4.5, 120: 5.5 },
-  ISOROOF_3G: { 30: 2.5, 40: 3.0, 50: 3.5, 80: 4.5, 100: 5.0 },
-  ISOPANEL_EPS: { 50: 3.0, 75: 4.0, 100: 5.0 },
-  ISOWALL_PIR: { 50: 3.5, 80: 4.5, 100: 5.5 },
+  // Techo (paneles autoportantes)
+  ISODEC_EPS:   { 100: 4.5, 150: 5.5, 200: 6.5, 250: 7.5 },
+  ISODEC_PIR:   { 50: 3.5, 80: 4.5, 120: 5.5 },
+  ISOROOF_3G:   { 30: 2.5, 40: 3.0, 50: 3.5, 80: 4.5, 100: 5.0 },
+  ISOROOF_FOIL: { 30: 2.5, 50: 3.5 },
+  ISOROOF_PLUS: { 50: 3.5, 80: 4.5 },
+  // Pared (altura libre máxima recomendada)
+  ISOPANEL_EPS: { 50: 3.0, 75: 4.0, 100: 5.0, 150: 6.0, 200: 7.0, 250: 7.5 },
+  ISOWALL_PIR:  { 50: 3.5, 80: 4.5, 100: 5.5 },
+  ISOFRIG_PIR:  { 40: 3.0, 60: 3.5, 80: 4.5, 100: 5.0, 150: 6.0 },
 };
 
 /**

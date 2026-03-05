@@ -2,23 +2,30 @@
 
 const { getPanelInfo, getAccessoryInfo } = require('../data/catalog');
 
-// Perfil U SKU by panel thickness (solera superior + inferior)
-// Piece length = 3m
+// Perfil U SKU by panel thickness (solera superior + inferior), pieza = 3m
 const PERFIL_U_SKU = {
-  40:  'PU50MM',   // ISOFRIG 40mm
-  50:  'PU50MM',   // closest available (no PU for 50mm wall panels)
-  60:  'PU50MM',   // ISOFRIG 60mm — closest available profile
-  80:  'PU100MM',  // closest above 80mm
+  40:  'PU50MM',
+  50:  'PU50MM',
+  60:  'PU50MM',
+  80:  'PU100MM',
   100: 'PU100MM',
   150: 'PU150MM',
   200: 'PU200MM',
   250: 'PU250MM',
 };
 
-const PERFIL_U_LENGTH = 3.0; // each piece is 3m
+// Perfil G2 (alternativo al U para ISOPANEL_EPS ≥ 100mm)
+const PERFIL_G2_SKU = {
+  100: 'G2-100',
+  150: 'G2-150',
+  200: 'G2-200',
+  250: 'G2-250',
+};
+
+const PERFIL_U_LENGTH = 3.0; // piezas de 3m
 
 /**
- * Add an accessory item to the BOM list. Skips if sku is null, cantidad is not finite, or cantidad <= 0.
+ * Add an accessory item to the BOM list.
  * @returns {number} subtotal added
  */
 function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
@@ -34,19 +41,27 @@ function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
  * Calcula el BOM completo para una pared/fachada de paneles Panelin.
  *
  * @param {Object} params
- * @param {string} params.familia          - e.g. 'ISOPANEL_EPS', 'ISOWALL_PIR'
+ * @param {string} params.familia           - e.g. 'ISOPANEL_EPS', 'ISOWALL_PIR'
  * @param {number} params.espesor_mm
- * @param {number} [params.ancho_m]        - Ancho total de la pared en metros (alternativo a cant_paneles)
- * @param {number} [params.cant_paneles]   - Cantidad de paneles (alternativo a ancho_m)
- * @param {number} params.largo_m          - Altura de la pared en metros
- * @param {number} [params.num_aberturas]  - Cantidad de aberturas (default 0)
+ * @param {number} [params.ancho_m]         - Ancho total de la pared en metros (alternativo a cant_paneles)
+ * @param {number} [params.cant_paneles]    - Cantidad de paneles (alternativo a ancho_m)
+ * @param {number} params.largo_m           - Altura de la pared en metros
+ * @param {Array}  [params.aberturas]       - [{ancho, alto, cant}] — descuenta área real del coste de paneles
+ * @param {number} [params.num_aberturas]   - Compat. legacy: cantidad de aberturas (sin descuento de área)
+ * @param {number} [params.num_esq_ext]     - Esquineros exteriores (default 0)
+ * @param {number} [params.num_esq_int]     - Esquineros interiores (default 0)
+ * @param {boolean} [params.incl_k2]        - Incluir perfil K2 entre paneles (default true)
+ * @param {boolean} [params.incl_5852]      - Incluir ángulo aluminio 5852 (default false)
  * @param {'metal'|'hormigon'|'mixto'} [params.estructura]
  * @param {'venta'|'web'} [params.lista_precios]
  * @returns {Object} BOM detallado con items y subtotal
  */
 function calcParedCompleto({
   familia, espesor_mm, ancho_m, cant_paneles, largo_m,
-  num_aberturas = 0, estructura = 'metal', lista_precios = 'venta',
+  aberturas = [], num_aberturas = 0,
+  num_esq_ext = 0, num_esq_int = 0,
+  incl_k2 = true, incl_5852 = false,
+  estructura = 'metal', lista_precios = 'venta',
 }) {
   const panelInfo = getPanelInfo(familia, espesor_mm, lista_precios);
   const { sku: panelSku, name: panelName, precio_m2, au_m } = panelInfo;
@@ -61,14 +76,29 @@ function calcParedCompleto({
     anchoEfectivo = cantP * au_m;
   }
 
-  const area_m2 = Math.round(cantP * au_m * largo_m * 100) / 100;
-  const costo_paneles = Math.round(area_m2 * precio_m2 * 100) / 100;
+  // ── Área de paneles ──────────────────────────────────────────────────────
+  const areaBruta = Math.round(cantP * au_m * largo_m * 100) / 100;
+
+  // Descuento de aberturas con dimensiones reales
+  let areaAberturas = 0;
+  if (Array.isArray(aberturas) && aberturas.length > 0) {
+    for (const ab of aberturas) {
+      const ancho = Number(ab.ancho || 0);
+      const alto = Number(ab.alto || 0);
+      const cant = Number(ab.cant || 1);
+      if (ancho > 0 && alto > 0) areaAberturas += ancho * alto * cant;
+    }
+  }
+  areaAberturas = Math.round(areaAberturas * 100) / 100;
+  const areaNeta = Math.round(Math.max(areaBruta - areaAberturas, 0) * 100) / 100;
+
+  const costo_paneles = Math.round(areaNeta * precio_m2 * 100) / 100;
   const precio_unit_panel = Math.round(precio_m2 * au_m * largo_m * 100) / 100;
 
   const items = [];
   let subtotal = costo_paneles;
 
-  // 1. Panels
+  // 1. Paneles
   items.push({
     sku: panelSku,
     descripcion: panelName || `Panel ${familia} ${espesor_mm}mm`,
@@ -76,9 +106,12 @@ function calcParedCompleto({
     unidad: 'panel',
     precio_unit: precio_unit_panel,
     subtotal: costo_paneles,
+    area_bruta_m2: areaBruta,
+    area_aberturas_m2: areaAberturas,
+    area_neta_m2: areaNeta,
   });
 
-  // 2. Perfil U — solera superior + inferior (2 × ancho_m, piezas de 3m)
+  // 2. Perfil U — solera superior + inferior (2 × anchoEfectivo, piezas de 3m)
   const puSku = PERFIL_U_SKU[Number(espesor_mm)];
   if (puSku) {
     const mlPerfilU = 2 * anchoEfectivo;
@@ -92,9 +125,59 @@ function calcParedCompleto({
     });
   }
 
-  // 3. Tornillos TMOME (~5.5 per m² for metal/mixto structure)
+  // 3. Perfil K2 — juntas verticales entre paneles (cantP-1 juntas × altura)
+  if (incl_k2 && cantP > 1) {
+    const juntasK2 = (cantP - 1) * Math.ceil(largo_m / 3.0);
+    subtotal += addItem(items, {
+      sku: 'K2',
+      descripcion: `Perfil K2 junta interior (${cantP - 1} juntas)`,
+      cantidad: juntasK2,
+      unidad: 'pieza',
+      lista_precios,
+    });
+  }
+
+  // 4. Esquineros exteriores
+  if (num_esq_ext > 0) {
+    const cantEsqExt = num_esq_ext * Math.ceil(largo_m / 3.0);
+    subtotal += addItem(items, {
+      sku: 'ESQ-EXT',
+      descripcion: `Esquinero exterior (${num_esq_ext} esq.)`,
+      cantidad: cantEsqExt,
+      unidad: 'pieza',
+      lista_precios,
+    });
+  }
+
+  // 5. Esquineros interiores
+  if (num_esq_int > 0) {
+    const cantEsqInt = num_esq_int * Math.ceil(largo_m / 3.0);
+    subtotal += addItem(items, {
+      sku: 'ESQ-INT',
+      descripcion: `Esquinero interior (${num_esq_int} esq.)`,
+      cantidad: cantEsqInt,
+      unidad: 'pieza',
+      lista_precios,
+    });
+  }
+
+  // 6. Ángulo aluminio 5852 (opcional)
+  if (incl_5852) {
+    const cant5852 = Math.ceil(anchoEfectivo / 6.8);
+    subtotal += addItem(items, {
+      sku: 'PLECHU98',
+      descripcion: 'Ángulo aluminio 5852 (6.8m)',
+      cantidad: cant5852,
+      unidad: 'pieza',
+      lista_precios,
+    });
+  }
+
+  // ── Fijaciones ───────────────────────────────────────────────────────────
+  // Tornillos T2 + anclaje H° para todas las estructuras (pared siempre requiere anclaje)
   if (estructura === 'metal' || estructura === 'mixto') {
-    const cantTornillos = Math.ceil(area_m2 * 5.5);
+    // Tornillos TMOME (~5.5 per m² sobre área neta)
+    const cantTornillos = Math.ceil(areaNeta * 5.5);
     subtotal += addItem(items, {
       sku: 'TMOME',
       descripcion: 'Tornillo TMOME (madera/metal)',
@@ -103,7 +186,6 @@ function calcParedCompleto({
       lista_precios,
     });
 
-    // 4. Arandelas ARATRAP (same qty as tornillos)
     subtotal += addItem(items, {
       sku: 'ARATRAP',
       descripcion: 'Arandela Trapezoidal ARATRAP',
@@ -113,8 +195,17 @@ function calcParedCompleto({
     });
   }
 
-  // 5. Remaches POP — RPOP (caja 1000u): 2 per panel for panel-to-panel union
-  // Show in boxes: ceil(cant_remaches / 1000) cajas
+  // Anclajes H° — 1 cada 0.30m lineal de ancho efectivo (siempre, independiente de estructura)
+  const cantAnclajes = Math.ceil(anchoEfectivo / 0.30);
+  subtotal += addItem(items, {
+    sku: 'ANCLAJE_H',
+    descripcion: 'Kit anclaje H° (1 c/30cm)',
+    cantidad: cantAnclajes,
+    unidad: 'unid',
+    lista_precios,
+  });
+
+  // Remaches POP — 2 por panel para unión panel-a-panel
   const cantRemaches = cantP * 2;
   const cantCajasRPOP = Math.max(1, Math.ceil(cantRemaches / 1000));
   subtotal += addItem(items, {
@@ -125,7 +216,8 @@ function calcParedCompleto({
     lista_precios,
   });
 
-  // 6. Cinta butilo (1 roll per (cant_paneles-1)*largo_m / 22.5m)
+  // ── Selladores ───────────────────────────────────────────────────────────
+  // Cinta butilo entre juntas longitudinales
   const cantButilo = Math.max(1, Math.ceil((cantP - 1) * largo_m / 22.5));
   subtotal += addItem(items, {
     sku: 'C.But.',
@@ -135,11 +227,14 @@ function calcParedCompleto({
     lista_precios,
   });
 
-  // 7. Silicona Bromplast (1 cartucho per 15 m²)
-  const cantSilicona = Math.ceil(area_m2 / 15);
+  // Silicona por ML de juntas (más preciso que por m²)
+  // Juntas verticales = (cantP-1) × alto
+  // Perímetro superior + inferior = anchoEfectivo × 2
+  const mlJuntas = Math.round(((cantP - 1) * largo_m + anchoEfectivo * 2) * 100) / 100;
+  const cantSilicona = Math.ceil(mlJuntas / 8); // 1 cartucho cubre ~8 ml de junta
   subtotal += addItem(items, {
     sku: 'Bromplast',
-    descripcion: 'Silicona Bromplast (600ml)',
+    descripcion: `Silicona Bromplast (600ml) — ${mlJuntas}ml de juntas`,
     cantidad: cantSilicona,
     unidad: 'cartucho',
     lista_precios,
@@ -151,9 +246,13 @@ function calcParedCompleto({
     espesor_mm,
     ancho_m: anchoEfectivo,
     largo_m,
-    area_m2,
+    area_bruta_m2: areaBruta,
+    area_aberturas_m2: areaAberturas,
+    area_neta_m2: areaNeta,
     cant_paneles: cantP,
-    num_aberturas,
+    aberturas: aberturas.length > 0 ? aberturas : (num_aberturas > 0 ? [{ cant: num_aberturas, nota: 'legacy_count' }] : []),
+    num_esq_ext,
+    num_esq_int,
     estructura,
     items,
     subtotal: Math.round(subtotal * 100) / 100,

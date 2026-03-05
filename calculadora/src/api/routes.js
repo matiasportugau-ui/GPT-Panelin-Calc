@@ -35,7 +35,7 @@ function parseBool(val) {
 
 // GET /health
 router.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'calculadora-bmc', version: '5.0.0' });
+  res.json({ status: 'ok', service: 'calculadora-bmc', version: '5.1.0' });
 });
 
 // GET /api/productos
@@ -68,8 +68,18 @@ router.post('/api/cotizar', (req, res) => {
   try {
     const {
       escenario, familia, espesor_mm, ancho_m, cant_paneles, largo_m,
-      lista_precios, apoyos, num_aberturas, estructura,
-      tiene_cumbrera, tiene_canalon, envio_usd,
+      lista_precios, apoyos,
+      // aberturas: nuevo formato [{ancho, alto, cant}] o legacy num_aberturas
+      aberturas, num_aberturas,
+      // esquineros
+      num_esq_ext, num_esq_int,
+      // opciones pared
+      incl_k2, incl_5852,
+      // opciones techo
+      estructura, tiene_cumbrera, tiene_canalon,
+      tipo_gotero_frontal,
+      // extras
+      color, envio_usd,
     } = req.body;
 
     if (!escenario) return res.status(400).json({ ok: false, error: 'Campo requerido: escenario' });
@@ -126,13 +136,28 @@ router.post('/api/cotizar', (req, res) => {
       }
     }
 
+    // aberturas: acepta array [{ancho, alto, cant}] o legacy num_aberturas
+    let aberturasArr = [];
     let aberturasNum = 0;
-    if (num_aberturas !== undefined && num_aberturas !== null && num_aberturas !== '') {
+    if (Array.isArray(aberturas) && aberturas.length > 0) {
+      for (const ab of aberturas) {
+        const ancho = Number(ab.ancho);
+        const alto  = Number(ab.alto);
+        const cant  = Number(ab.cant || 1);
+        if (!Number.isFinite(ancho) || ancho < 0) return res.status(400).json({ ok: false, error: 'aberturas[].ancho debe ser un número >= 0' });
+        if (!Number.isFinite(alto)  || alto  < 0) return res.status(400).json({ ok: false, error: 'aberturas[].alto debe ser un número >= 0' });
+        aberturasArr.push({ ancho, alto, cant });
+      }
+    } else if (num_aberturas !== undefined && num_aberturas !== null && num_aberturas !== '') {
       aberturasNum = Number(num_aberturas);
       if (!Number.isFinite(aberturasNum) || aberturasNum < 0) {
         return res.status(400).json({ ok: false, error: 'num_aberturas debe ser un numero finito >= 0' });
       }
     }
+
+    // esquineros
+    const esqExtNum = (num_esq_ext !== undefined && num_esq_ext !== null) ? Math.max(0, Math.floor(Number(num_esq_ext))) : 0;
+    const esqIntNum = (num_esq_int !== undefined && num_esq_int !== null) ? Math.max(0, Math.floor(Number(num_esq_int))) : 0;
 
     const listaPreciosNormalizada = lista_precios || 'venta';
     if (!['venta', 'web'].includes(listaPreciosNormalizada)) {
@@ -155,10 +180,17 @@ router.post('/api/cotizar', (req, res) => {
       largo_m: largoNum,
       lista_precios: listaPreciosNormalizada,
       apoyos: apoyosNum,
+      aberturas: aberturasArr,
       num_aberturas: aberturasNum,
+      num_esq_ext: esqExtNum,
+      num_esq_int: esqIntNum,
+      incl_k2: incl_k2 !== undefined ? parseBool(incl_k2) : true,
+      incl_5852: parseBool(incl_5852),
       estructura: estructura || 'metal',
       tiene_cumbrera: parseBool(tiene_cumbrera),
       tiene_canalon: parseBool(tiene_canalon),
+      tipo_gotero_frontal: tipo_gotero_frontal || 'liso',
+      color: color || undefined,
       envio_usd: envioNum,
     });
 

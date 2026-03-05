@@ -164,26 +164,64 @@ function getPanelInfo(familia, espesor_mm, lista_precios = 'venta') {
   };
 }
 
+// Hardcoded accessories not present in catalog_real.csv
+// Prices from v3.1 Calculadora-BMC reference (USD excl. IVA)
+const HARDCODED_ACCESSORIES = {
+  // --- Fijaciones techo varilla-tuerca (ISODEC_EPS / ISODEC_PIR) ---
+  'VARILLA38':    { name: 'Varilla roscada 3/8"',           venta: 3.12,  web: 3.64,  unit_base: 'unid',  length_m: null },
+  'TUERCA38':     { name: 'Tuerca 3/8" galv.',               venta: 0.12,  web: 0.07,  unit_base: 'unid',  length_m: null },
+  'ARCA38':       { name: 'Arandela carrocero 3/8"',         venta: 1.68,  web: 0.64,  unit_base: 'unid',  length_m: null },
+  'ARAPP':        { name: 'Tortuga PVC (arandela PP)',        venta: 1.27,  web: 1.48,  unit_base: 'unid',  length_m: null },
+  'TACEXP38':     { name: 'Taco expansivo 3/8"',             venta: 0.96,  web: 1.12,  unit_base: 'unid',  length_m: null },
+  // --- Fijaciones techo caballete-tornillo (ISOROOF_*) ---
+  'CABALLETE':    { name: 'Caballete (arandela trapezoidal)', venta: 0.50,  web: 0.46,  unit_base: 'unid',  length_m: null },
+  'TORN_AGUJA':   { name: 'Tornillo aguja 5"',               venta: 17.00, web: 17.00, unit_base: 'x100',  length_m: null },
+  // --- Fijaciones pared ---
+  'ANCLAJE_H':    { name: 'Kit anclaje H°',                  venta: 0.09,  web: 0.03,  unit_base: 'unid',  length_m: null },
+  'TORN_T1':      { name: 'Tornillo T1 (perfilería)',         venta: 5.00,  web: 5.00,  unit_base: 'x100',  length_m: null },
+  'TORN_T2':      { name: 'Tornillo T2 (fachada)',            venta: 5.00,  web: 5.00,  unit_base: 'x100',  length_m: null },
+  // --- Perfilería pared ---
+  'K2':           { name: 'Perfil K2 (junta interior)',       venta: 8.59,  web: 10.48, unit_base: 'pieza', length_m: 3.0  },
+  'ESQ-EXT':      { name: 'Esquinero exterior',               venta: 8.59,  web: 10.48, unit_base: 'pieza', length_m: 3.0  },
+  'ESQ-INT':      { name: 'Esquinero interior',               venta: 8.59,  web: 10.48, unit_base: 'pieza', length_m: 3.0  },
+  'G2-100':       { name: 'Perfil G2 100mm',                  venta: 15.34, web: 18.72, unit_base: 'pieza', length_m: 3.0  },
+  'G2-150':       { name: 'Perfil G2 150mm',                  venta: 17.61, web: 21.49, unit_base: 'pieza', length_m: 3.0  },
+  'G2-200':       { name: 'Perfil G2 200mm',                  venta: 21.13, web: 25.78, unit_base: 'pieza', length_m: 3.0  },
+  'G2-250':       { name: 'Perfil G2 250mm',                  venta: 21.30, web: 25.99, unit_base: 'pieza', length_m: 3.0  },
+  'PLECHU98':     { name: 'Ángulo aluminio 5852 (6.8m)',       venta: 51.84, web: 63.24, unit_base: 'pieza', length_m: 6.8  },
+  // --- Selladores extra ---
+  'MEMBRANA':     { name: 'Membrana autoadhesiva 30cm×10m',   venta: 16.62, web: 20.28, unit_base: 'rollo', length_m: null },
+  'ESPUMA_PU':    { name: 'Espuma poliuretano 750cm³',         venta: 25.46, web: 31.06, unit_base: 'unid',  length_m: null },
+  // --- Goteros extra techo ---
+  'GFCGR30':      { name: 'Gotero frontal greca ISOROOF',      venta: 17.99, web: 19.38, unit_base: 'pieza', length_m: 3.03 },
+  'GLDCAM50':     { name: 'Gotero lateral cámara 50mm',        venta: 22.32, web: 27.23, unit_base: 'pieza', length_m: 3.0  },
+  'GLDCAM80':     { name: 'Gotero lateral cámara 80mm',        venta: 25.11, web: 30.63, unit_base: 'pieza', length_m: 3.0  },
+};
+
 /**
  * Get accessory info by SKU.
+ * Looks up catalog_real.csv first; falls back to HARDCODED_ACCESSORIES.
  * @param {string} sku
  * @param {'venta'|'web'} lista_precios
  * @returns {{ sku, name, precio, length_m, unit_base }}
  */
 function getAccessoryInfo(sku, lista_precios = 'venta') {
   const row = skuMap.get(sku);
-  if (!row) throw new Error(`Accesorio no encontrado: ${sku}`);
-  const precio = lista_precios === 'web' ? row.web : row.venta;
-  if (precio === null || precio === undefined) {
-    throw new Error(`Precio no disponible para SKU ${sku}`);
+  if (row) {
+    const precio = lista_precios === 'web' ? row.web : row.venta;
+    if (precio === null || precio === undefined) {
+      throw new Error(`Precio no disponible para SKU ${sku}`);
+    }
+    return { sku: row.sku, name: row.name, precio, length_m: row.length_m, unit_base: row.unit_base };
   }
-  return {
-    sku: row.sku,
-    name: row.name,
-    precio,
-    length_m: row.length_m,
-    unit_base: row.unit_base,
-  };
+
+  const hard = HARDCODED_ACCESSORIES[sku];
+  if (hard) {
+    const precio = lista_precios === 'web' ? hard.web : hard.venta;
+    return { sku, name: hard.name, precio, length_m: hard.length_m, unit_base: hard.unit_base };
+  }
+
+  throw new Error(`Accesorio no encontrado: ${sku}`);
 }
 
 /**

@@ -8,6 +8,34 @@ const { ivaRate } = require('../data/catalog');
 
 const ESCENARIOS_VALIDOS = ['solo_techo', 'solo_fachada', 'techo_fachada', 'camara_frigorifica'];
 
+// Límites de largo por familia (metros)
+const PANEL_LARGOS = {
+  ISODEC_EPS:   { lmin: 2.3,  lmax: 14   },
+  ISODEC_PIR:   { lmin: 3.5,  lmax: 14   },
+  ISOROOF_3G:   { lmin: 3.5,  lmax: 8.5  },
+  ISOROOF_FOIL: { lmin: 3.5,  lmax: 8.5  },
+  ISOROOF_PLUS: { lmin: 3.5,  lmax: 8.5  },
+  ISOPANEL_EPS: { lmin: 2.3,  lmax: 14   },
+  ISOWALL_PIR:  { lmin: 3.5,  lmax: 14   },
+  ISOFRIG_PIR:  { lmin: 2.3,  lmax: 14   },
+};
+
+// Restricciones de color por familia y espesor
+// colMax: espesor máximo disponible para ese color
+// nota: advertencia a mostrar
+const COLOR_RESTRICCIONES = {
+  ISODEC_EPS: {
+    Gris:  { colMax: 150, nota: 'Solo 100–150mm · +20 días hábiles de entrega' },
+    Rojo:  { colMax: 150, nota: 'Solo 100–150mm · +20 días hábiles de entrega' },
+    Blanco: {},
+  },
+  ISOROOF_3G: {
+    Blanco: { minArea: 500, nota: 'Mínimo 500 m² por pedido' },
+    Gris:   {},
+    Rojo:   {},
+  },
+};
+
 /**
  * Orquestador principal. Genera una cotización completa según el escenario.
  *
@@ -25,6 +53,13 @@ const ESCENARIOS_VALIDOS = ['solo_techo', 'solo_fachada', 'techo_fachada', 'cama
  * @param {boolean} [params.tiene_cumbrera]
  * @param {boolean} [params.tiene_canalon]
  * @param {number}  [params.envio_usd]        - Costo de envío en USD (solo incluido si se proporciona)
+ * @param {string}  [params.color]            - Color seleccionado (Blanco, Gris, Rojo)
+ * @param {Array}   [params.aberturas]        - [{ancho, alto, cant}] para pared
+ * @param {number}  [params.num_esq_ext]      - Esquineros exteriores para pared
+ * @param {number}  [params.num_esq_int]      - Esquineros interiores para pared
+ * @param {boolean} [params.incl_k2]          - Incluir K2 en pared
+ * @param {boolean} [params.incl_5852]        - Incluir ángulo 5852 en pared
+ * @param {'liso'|'greca'} [params.tipo_gotero_frontal]
  * @returns {Object} Cotización completa con IVA y warnings
  */
 function generarCotizacion(params) {
@@ -38,9 +73,16 @@ function generarCotizacion(params) {
     lista_precios = 'venta',
     apoyos = 0,
     num_aberturas = 0,
+    aberturas = [],
+    num_esq_ext = 0,
+    num_esq_int = 0,
+    incl_k2 = true,
+    incl_5852 = false,
     estructura = 'metal',
     tiene_cumbrera = false,
     tiene_canalon = false,
+    tipo_gotero_frontal = 'liso',
+    color,
     envio_usd,
   } = params;
 
@@ -70,6 +112,35 @@ function generarCotizacion(params) {
   const warnings = [];
   const secciones = [];
 
+  // Validación lmin / lmax por familia
+  const limites = PANEL_LARGOS[familia];
+  if (limites) {
+    if (largo_m < limites.lmin) {
+      warnings.push(`ADVERTENCIA: largo ${largo_m}m está por debajo del mínimo de ${limites.lmin}m para ${familia}.`);
+    }
+    if (largo_m > limites.lmax) {
+      warnings.push(`ADVERTENCIA: largo ${largo_m}m supera el máximo de ${limites.lmax}m para ${familia}.`);
+    }
+  }
+
+  // Validación de color con restricciones por familia
+  if (color) {
+    const famRestr = COLOR_RESTRICCIONES[familia];
+    if (famRestr) {
+      const colorRestr = famRestr[color];
+      if (colorRestr === undefined) {
+        warnings.push(`Color "${color}" no disponible para ${familia}.`);
+      } else {
+        if (colorRestr.colMax && Number(espesor_mm) > colorRestr.colMax) {
+          warnings.push(`Color "${color}" en ${familia} solo disponible hasta ${colorRestr.colMax}mm. Espesor solicitado: ${espesor_mm}mm.`);
+        }
+        if (colorRestr.nota) {
+          warnings.push(`Color "${color}": ${colorRestr.nota}`);
+        }
+      }
+    }
+  }
+
   // Autoportancia validation: uses the actual span (luz), not total length
   const luzReal = apoyos > 0 ? largo_m / (apoyos + 1) : largo_m;
   const autop = validarAutoportancia(familia, espesor_mm, luzReal);
@@ -77,8 +148,18 @@ function generarCotizacion(params) {
     warnings.push(autop.mensaje);
   }
 
-  const techoParams = { familia, espesor_mm, ancho_m, cant_paneles, largo_m, apoyos, lista_precios, tiene_cumbrera, tiene_canalon };
-  const paredParams = { familia, espesor_mm, ancho_m, cant_paneles, largo_m, num_aberturas, estructura, lista_precios };
+  const techoParams = {
+    familia, espesor_mm, ancho_m, cant_paneles, largo_m,
+    apoyos, estructura, lista_precios,
+    tiene_cumbrera, tiene_canalon, tipo_gotero_frontal,
+  };
+  const paredParams = {
+    familia, espesor_mm, ancho_m, cant_paneles, largo_m,
+    aberturas, num_aberturas,
+    num_esq_ext, num_esq_int,
+    incl_k2, incl_5852,
+    estructura, lista_precios,
+  };
 
   if (escenario === 'solo_techo' || escenario === 'techo_fachada') {
     secciones.push(calcTechoCompleto(techoParams));
@@ -123,6 +204,7 @@ function generarCotizacion(params) {
     escenario,
     familia,
     espesor_mm,
+    ...(color ? { color } : {}),
     lista_precios,
     secciones,
     resumen: {

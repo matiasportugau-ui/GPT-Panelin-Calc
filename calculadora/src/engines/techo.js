@@ -116,25 +116,43 @@ function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
   return subtotal;
 }
 
+// Fastening system by panel family
+// varilla_tuerca: structural bolt system (ISODEC heavy panels)
+// caballete_tornillo: saddle bracket + needle screw (ISOROOF light panels)
+// tmome: TMOME screw + ARATRAP washer (default / other families)
+const SIST_FIJACION_TECHO = {
+  ISODEC_EPS:    'varilla_tuerca',
+  ISODEC_PIR:    'varilla_tuerca',
+  ISOROOF_3G:    'caballete_tornillo',
+  ISOROOF_FOIL:  'caballete_tornillo',
+  ISOROOF_PLUS:  'caballete_tornillo',
+  ISOPANEL_EPS:  'tmome',
+  ISOWALL_PIR:   'tmome',
+  ISOFRIG_PIR:   'tmome',
+};
+
 /**
  * Calcula el BOM completo para un techo de paneles Panelin.
  *
  * @param {Object} params
- * @param {string} params.familia          - e.g. 'ISODEC_EPS', 'ISOROOF_3G'
- * @param {number} params.espesor_mm       - Espesor en mm
- * @param {number} [params.ancho_m]        - Ancho del techo en metros (alternativo a cant_paneles)
- * @param {number} [params.cant_paneles]   - Cantidad de paneles (alternativo a ancho_m)
- * @param {number} params.largo_m          - Largo del techo en metros
- * @param {number} [params.apoyos]         - Apoyos intermedios (default 0)
+ * @param {string} params.familia           - e.g. 'ISODEC_EPS', 'ISOROOF_3G'
+ * @param {number} params.espesor_mm        - Espesor en mm
+ * @param {number} [params.ancho_m]         - Ancho del techo en metros (alternativo a cant_paneles)
+ * @param {number} [params.cant_paneles]    - Cantidad de paneles (alternativo a ancho_m)
+ * @param {number} params.largo_m           - Largo del techo en metros
+ * @param {number} [params.apoyos]          - Apoyos intermedios (default 0)
+ * @param {'metal'|'hormigon'|'mixto'} [params.estructura]
  * @param {'venta'|'web'} [params.lista_precios]
  * @param {boolean} [params.tiene_cumbrera] - Incluir cumbrera (default false)
  * @param {boolean} [params.tiene_canalon]  - Incluir canalón (default false)
+ * @param {'liso'|'greca'} [params.tipo_gotero_frontal] - Tipo gotero frontal para ISOROOF (default 'liso')
  * @returns {Object} BOM detallado con items y subtotal
  */
 function calcTechoCompleto({
   familia, espesor_mm, ancho_m, cant_paneles, largo_m,
-  apoyos = 0, lista_precios = 'venta',
+  apoyos = 0, estructura = 'metal', lista_precios = 'venta',
   tiene_cumbrera = false, tiene_canalon = false,
+  tipo_gotero_frontal = 'liso',
 }) {
   const panelInfo = getPanelInfo(familia, espesor_mm, lista_precios);
   const { sku: panelSku, name: panelName, precio_m2, au_m } = panelInfo;
@@ -171,10 +189,16 @@ function calcTechoCompleto({
 
   if (gotero) {
     // 2. Gotero frontal (borde inferior — donde cae el agua)
+    // Para ISOROOF: puede ser liso o greca según tipo_gotero_frontal
+    let frontalSku = gotero.frontal_sku;
+    if (tipo_gotero_frontal === 'greca' &&
+        (familia === 'ISOROOF_3G' || familia === 'ISOROOF_FOIL' || familia === 'ISOROOF_PLUS')) {
+      frontalSku = 'GFCGR30'; // gotero frontal greca universal para ISOROOF
+    }
     const cantFrontal = Math.ceil(anchoEfectivo / gotero.frontal_length);
     subtotal += addItem(items, {
-      sku: gotero.frontal_sku,
-      descripcion: `Gotero Frontal (${familia} ${espesor_mm}mm)`,
+      sku: frontalSku,
+      descripcion: `Gotero Frontal ${tipo_gotero_frontal === 'greca' ? 'Greca' : ''} (${familia} ${espesor_mm}mm)`.trim(),
       cantidad: cantFrontal,
       unidad: 'pieza',
       lista_precios,
@@ -235,26 +259,48 @@ function calcTechoCompleto({
     }
   }
 
-  // 8. Tornillos TMOME (~6 per m²)
-  const cantTornillos = Math.ceil(areaRaw * 6);
-  subtotal += addItem(items, {
-    sku: 'TMOME',
-    descripcion: 'Tornillo TMOME (madera/metal)',
-    cantidad: cantTornillos,
-    unidad: 'und',
-    lista_precios,
-  });
+  // ── Fijaciones según sistema de fijación de la familia ──────────────────
+  const sist = SIST_FIJACION_TECHO[familia] || 'tmome';
 
-  // 9. Arandelas ARATRAP (same qty as tornillos)
-  subtotal += addItem(items, {
-    sku: 'ARATRAP',
-    descripcion: 'Arandela Trapezoidal ARATRAP',
-    cantidad: cantTornillos,
-    unidad: 'und',
-    lista_precios,
-  });
+  if (sist === 'varilla_tuerca') {
+    // Sistema varilla roscada 3/8" (ISODEC_EPS / ISODEC_PIR)
+    // Puntos de fijación = (paneles × apoyos_reales × 2) + (largo × 2 / 2.5)
+    const apoyosReales = apoyos > 0 ? apoyos : 2; // mínimo 2 apoyos estructurales
+    const ptosFij = Math.ceil((cantP * apoyosReales * 2) + (largo_m * 2 / 2.5));
+    const cantVarillas = Math.ceil(ptosFij / 4);
+    const cantTuercas = cantVarillas * 2;
+    const cantArcCarr = cantVarillas * 2;
+    const cantArPP = cantVarillas * 2;
 
-  // 10. Cinta butilo (1 roll per (cant_paneles-1)*largo_m / 22.5m)
+    subtotal += addItem(items, { sku: 'VARILLA38',  descripcion: 'Varilla roscada 3/8"',          cantidad: cantVarillas, unidad: 'unid', lista_precios });
+    subtotal += addItem(items, { sku: 'TUERCA38',   descripcion: 'Tuerca 3/8" galv.',              cantidad: cantTuercas,  unidad: 'unid', lista_precios });
+    subtotal += addItem(items, { sku: 'ARCA38',     descripcion: 'Arandela carrocero 3/8"',        cantidad: cantArcCarr,  unidad: 'unid', lista_precios });
+    subtotal += addItem(items, { sku: 'ARAPP',      descripcion: 'Tortuga PVC (arandela PP)',       cantidad: cantArPP,     unidad: 'unid', lista_precios });
+
+    // Taco expansivo solo para estructuras de hormigón
+    if (estructura === 'hormigon') {
+      subtotal += addItem(items, { sku: 'TACEXP38', descripcion: 'Taco expansivo 3/8"',             cantidad: ptosFij,      unidad: 'unid', lista_precios });
+    }
+
+  } else if (sist === 'caballete_tornillo') {
+    // Sistema caballete + tornillo aguja 5" (ISOROOF_*)
+    // Caballetes: ceil(paneles × 3 × (largo/2.9 + 1) + (largo × 2 / 0.3))
+    const cantCaballetes = Math.ceil((cantP * 3 * (largo_m / 2.9 + 1)) + (largo_m * 2 / 0.3));
+    const cantAgujas = cantCaballetes * 2;
+    const cajasAgujas = Math.ceil(cantAgujas / 100); // vienen de a x100
+
+    subtotal += addItem(items, { sku: 'CABALLETE',  descripcion: 'Caballete (arandela trapezoidal)', cantidad: cantCaballetes, unidad: 'unid', lista_precios });
+    subtotal += addItem(items, { sku: 'TORN_AGUJA', descripcion: 'Tornillo aguja 5" (caja ×100)',    cantidad: cajasAgujas,    unidad: 'caja', lista_precios });
+
+  } else {
+    // Sistema TMOME + ARATRAP (~6 per m²) — familias genéricas
+    const cantTornillos = Math.ceil(areaRaw * 6);
+    subtotal += addItem(items, { sku: 'TMOME',   descripcion: 'Tornillo TMOME (madera/metal)',    cantidad: cantTornillos, unidad: 'und', lista_precios });
+    subtotal += addItem(items, { sku: 'ARATRAP', descripcion: 'Arandela Trapezoidal ARATRAP',     cantidad: cantTornillos, unidad: 'und', lista_precios });
+  }
+
+  // ── Selladores ───────────────────────────────────────────────────────────
+  // Cinta butilo entre juntas longitudinales (1 rollo por (cantP-1)×largo / 22.5m)
   const cantButilo = Math.max(1, Math.ceil((cantP - 1) * largo_m / 22.5));
   subtotal += addItem(items, {
     sku: 'C.But.',
@@ -264,8 +310,8 @@ function calcTechoCompleto({
     lista_precios,
   });
 
-  // 11. Silicona Bromplast (1 cartucho per 15 m²)
-  const cantSilicona = Math.ceil(areaRaw / 15);
+  // Silicona Bromplast (1 cartucho por panel × 0.5 — aprox. 2 cartuchos por panel)
+  const cantSilicona = Math.ceil(cantP * 0.5);
   subtotal += addItem(items, {
     sku: 'Bromplast',
     descripcion: 'Silicona Bromplast (600ml)',
@@ -282,6 +328,7 @@ function calcTechoCompleto({
     largo_m,
     area_m2,
     cant_paneles: cantP,
+    sist_fijacion: sist,
     items,
     subtotal: Math.round(subtotal * 100) / 100,
   };
