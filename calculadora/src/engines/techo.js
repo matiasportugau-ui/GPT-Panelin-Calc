@@ -1,137 +1,140 @@
 'use strict';
 
-const { resolverPanelInfo, resolverPrecio } = require('./precios');
+const {
+  getPanelByFamilyAndThickness,
+  getAccessoryBySKU,
+  getGoteroFrontalSKU,
+  getGoteroSuperiorSKU,
+  getGoteroLateralSKU,
+  getCumbraSKU,
+  getCaalonSKU,
+  getSoporteCaalonSKU,
+} = require('../data/catalog');
 
-/**
- * Calcula el BOM completo para un techo de paneles Panelin.
- *
- * @param {Object} params
- * @param {string} params.familia        - e.g. 'ISODEC_EPS', 'ISOROOF_3G'
- * @param {number} params.espesor_mm     - Espesor en mm
- * @param {number} params.ancho_m        - Ancho del techo en metros
- * @param {number} params.largo_m        - Largo del techo en metros
- * @param {number} params.apoyos         - Cantidad de apoyos intermedios (default 0)
- * @param {'venta'|'web'} params.lista_precios
- * @returns {Object} BOM detallado con items y subtotal
- */
-function calcTechoCompleto({ familia, espesor_mm, ancho_m, largo_m, apoyos = 0, lista_precios = 'venta' }) {
-  const panelInfo = resolverPanelInfo(familia, espesor_mm, lista_precios);
-  const { precio_m2, au_m } = panelInfo;
+const PIEZA_FRONTAL_M = 3.03;
+const PIEZA_LATERAL_M = 3.00;
+const CINTA_BUTILO_ML = 22.5;
 
-  // Cantidad de paneles (ancho panel = au_m)
-  const cantP = Math.ceil(ancho_m / au_m);
-  const area_m2 = cantP * au_m * largo_m;
-  const costo_paneles = area_m2 * precio_m2;
+function addItem(items, warnings, sku, cantidad, lista_precios, descripcion_fallback) {
+  try {
+    const acc = getAccessoryBySKU(sku, lista_precios);
+    const precio_unit = Math.round(acc.precio * 100) / 100;
+    const sub = Math.round(cantidad * precio_unit * 100) / 100;
+    items.push({ sku, descripcion: acc.nombre, cantidad, unidad: 'unidad', precio_unit, subtotal: sub });
+    return sub;
+  } catch (e) {
+    warnings.push('Accesorio no encontrado: ' + (descripcion_fallback || sku));
+    return 0;
+  }
+}
 
-  const items = [];
+function calcTechoCompleto({
+  familia,
+  espesor_mm,
+  ancho_m,
+  cant_paneles,
+  largo_m,
+  apoyos = 0,
+  lista_precios = 'venta',
+  tiene_cumbrera = false,
+  tiene_canalon = false,
+}) {
+  const panelInfo = getPanelByFamilyAndThickness(familia, espesor_mm, lista_precios);
+  const { sku: skuPanel, au_m, precio_m2, nombre: nombrePanel } = panelInfo;
 
-  // Paneles
-  items.push({
-    descripcion: `Panel ${familia} ${espesor_mm}mm`,
-    cantidad: cantP,
-    unidad: 'panel',
-    precio_unit: precio_m2 * au_m * largo_m,
-    subtotal: costo_paneles,
-  });
-
-  let subtotal = costo_paneles;
-
-  const esISORoof = familia.startsWith('ISOROOF');
-
-  // Fijaciones
-  if (esISORoof) {
-    // ISOROOF: caballete
-    const largoBarra = 2.9;
-    const cantCaballete = Math.ceil((cantP * 3 * (largo_m / largoBarra + 1)) + (largo_m * 2 / 0.3));
-    const precioCaballete = resolverPrecio('caballete_unidad', lista_precios);
-    const costoCaballete = cantCaballete * precioCaballete;
-    items.push({
-      descripcion: 'Caballete ISOROOF',
-      cantidad: cantCaballete,
-      unidad: 'und',
-      precio_unit: precioCaballete,
-      subtotal: costoCaballete,
-    });
-    subtotal += costoCaballete;
-
-    // Soporte canalón
-    const mlSoportes = (cantP + 1) * 0.30;
-    const largoBarra3m = 3;
-    const barrasSoporte = Math.ceil(mlSoportes / largoBarra3m);
-    const precioSoporte = resolverPrecio('barra_soporte_3m', lista_precios);
-    const costoSoportes = barrasSoporte * precioSoporte;
-    items.push({
-      descripcion: 'Barra soporte canalón',
-      cantidad: barrasSoporte,
-      unidad: 'barra',
-      precio_unit: precioSoporte,
-      subtotal: costoSoportes,
-    });
-    subtotal += costoSoportes;
+  let cantP, anchoReal;
+  if (cant_paneles != null && Number(cant_paneles) > 0) {
+    cantP = Math.ceil(Number(cant_paneles));
+    anchoReal = cantP * au_m;
   } else {
-    // ISODEC: varilla + tuerca/arandela
-    const cantVarillas = Math.ceil((cantP * (apoyos + 2) * 2) + (largo_m * 2 / 2.5));
-    const precioVarilla = resolverPrecio('varilla_roscada_m', lista_precios);
-    const costoVarillas = cantVarillas * largo_m * precioVarilla;
-    items.push({
-      descripcion: 'Varilla roscada (m)',
-      cantidad: cantVarillas * largo_m,
-      unidad: 'm',
-      precio_unit: precioVarilla,
-      subtotal: costoVarillas,
-    });
-    subtotal += costoVarillas;
-
-    const cantTuercas = Math.ceil((cantP * apoyos * 2) + (largo_m * 2 / 2.5));
-    const precioTuerca = resolverPrecio('tuerca_arandela_set', lista_precios);
-    const costoTuercas = cantTuercas * precioTuerca;
-    items.push({
-      descripcion: 'Set tuerca + arandela',
-      cantidad: cantTuercas,
-      unidad: 'set',
-      precio_unit: precioTuerca,
-      subtotal: costoTuercas,
-    });
-    subtotal += costoTuercas;
+    cantP = Math.ceil(Number(ancho_m) / au_m);
+    anchoReal = cantP * au_m;
   }
 
-  // Perfilería de bordes (perímetro)
-  const perimetro = 2 * (ancho_m + largo_m);
-  const cantBorde = Math.ceil(perimetro);
-  const precioBorde = resolverPrecio('perfil_borde_m', lista_precios);
-  const costoBorde = cantBorde * precioBorde;
-  items.push({
-    descripcion: 'Perfil de borde (perímetro)',
-    cantidad: cantBorde,
-    unidad: 'm',
-    precio_unit: precioBorde,
-    subtotal: costoBorde,
-  });
-  subtotal += costoBorde;
+  const area_m2 = cantP * au_m * largo_m;
+  const items = [];
+  const warnings = [];
+  let subtotal = 0;
 
-  // Sellador (1 cartucho cada 8 m² aprox)
-  const cartuchosSellador = Math.ceil(area_m2 / 8);
-  const precioSellador = resolverPrecio('sellador_310ml', lista_precios);
-  const costoSellador = cartuchosSellador * precioSellador;
-  items.push({
-    descripcion: 'Sellador poliuretano 310ml',
-    cantidad: cartuchosSellador,
-    unidad: 'cartucho',
-    precio_unit: precioSellador,
-    subtotal: costoSellador,
-  });
-  subtotal += costoSellador;
+  // Paneles
+  const precioPanel = Math.round(precio_m2 * au_m * largo_m * 100) / 100;
+  const costoPanel  = Math.round(cantP * precioPanel * 100) / 100;
+  items.push({ sku: skuPanel, descripcion: nombrePanel, cantidad: cantP, unidad: 'panel', precio_unit: precioPanel, subtotal: costoPanel });
+  subtotal += costoPanel;
+
+  // Gotero Frontal Inferior
+  const skuGF = getGoteroFrontalSKU(familia, espesor_mm);
+  if (skuGF) {
+    subtotal += addItem(items, warnings, skuGF, Math.ceil(anchoReal / PIEZA_FRONTAL_M), lista_precios, 'Gotero Frontal ' + familia + ' ' + espesor_mm + 'mm');
+  }
+
+  // Gotero Superior
+  const skuGS = getGoteroSuperiorSKU(familia, espesor_mm);
+  if (skuGS) {
+    subtotal += addItem(items, warnings, skuGS, Math.ceil(anchoReal / PIEZA_FRONTAL_M), lista_precios, 'Gotero Superior ' + familia + ' ' + espesor_mm + 'mm');
+  }
+
+  // Goteros Laterales (izq + der)
+  const skuGL = getGoteroLateralSKU(familia, espesor_mm);
+  if (skuGL) {
+    subtotal += addItem(items, warnings, skuGL, Math.ceil(largo_m / PIEZA_LATERAL_M) * 2, lista_precios, 'Gotero Lateral ' + familia + ' ' + espesor_mm + 'mm');
+  }
+
+  // Cumbrera (solo si tiene 2 aguas)
+  if (tiene_cumbrera) {
+    const skuCumb = getCumbraSKU(familia);
+    if (skuCumb) {
+      const piezaM = getAccessoryBySKU(skuCumb, lista_precios).largo_m || 3.0;
+      subtotal += addItem(items, warnings, skuCumb, Math.ceil(anchoReal / piezaM), lista_precios, 'Cumbrera');
+    } else {
+      warnings.push('No hay cumbrera definida en catálogo para familia ' + familia);
+    }
+  }
+
+  // Canalón + Soporte (solo si tiene canalón)
+  if (tiene_canalon) {
+    const skuCan = getCaalonSKU(familia, espesor_mm);
+    if (skuCan) {
+      subtotal += addItem(items, warnings, skuCan, Math.ceil(anchoReal / PIEZA_FRONTAL_M), lista_precios, 'Canalón ' + familia + ' ' + espesor_mm + 'mm');
+      const skuSop = getSoporteCaalonSKU(familia);
+      if (skuSop) {
+        subtotal += addItem(items, warnings, skuSop, Math.ceil(anchoReal / 1.5), lista_precios, 'Soporte Canalón');
+      }
+    } else {
+      warnings.push('No hay canalón definido en catálogo para ' + familia + ' ' + espesor_mm + 'mm');
+    }
+  }
+
+  // Fijaciones: ISOROOF → Caballete Rojo; otros → TMOME + ARATRAP
+  const cantFij = Math.ceil(area_m2 * 6);
+  if (familia.startsWith('ISOROOF')) {
+    subtotal += addItem(items, warnings, 'Cab. Roj', cantFij, lista_precios, 'Caballete Rojo');
+  } else {
+    subtotal += addItem(items, warnings, 'TMOME', cantFij, lista_precios, 'Tornillo madera/metal');
+    subtotal += addItem(items, warnings, 'ARATRAP', cantFij, lista_precios, 'Arandela Trapezoidal');
+  }
+
+  // Sellado: cinta butilo entre paneles
+  const cantButilo = Math.ceil((cantP - 1) * largo_m / CINTA_BUTILO_ML);
+  if (cantButilo > 0) {
+    subtotal += addItem(items, warnings, 'C.But.', cantButilo, lista_precios, 'Cinta Butilo');
+  }
+  // Silicona: 1 cada 15m²
+  subtotal += addItem(items, warnings, 'Bromplast', Math.ceil(area_m2 / 15), lista_precios, 'Silicona Neutra Bromplast');
 
   return {
     tipo: 'techo',
     familia,
     espesor_mm,
-    ancho_m,
+    ancho_m: Math.round(anchoReal * 100) / 100,
     largo_m,
     area_m2: Math.round(area_m2 * 100) / 100,
     cant_paneles: cantP,
+    tiene_cumbrera,
+    tiene_canalon,
     items,
     subtotal: Math.round(subtotal * 100) / 100,
+    warnings,
   };
 }
 

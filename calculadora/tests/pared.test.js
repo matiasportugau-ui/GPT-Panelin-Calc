@@ -2,13 +2,13 @@
 
 const { calcParedCompleto } = require('../src/engines/pared');
 
-describe('calcParedCompleto — ISOPANEL EPS 50mm 3x10m', () => {
+describe('calcParedCompleto — ISOPANEL EPS 100mm 3×10m metal', () => {
   let result;
 
   beforeAll(() => {
     result = calcParedCompleto({
       familia: 'ISOPANEL_EPS',
-      espesor_mm: 50,
+      espesor_mm: 100,
       ancho_m: 3,
       largo_m: 10,
       num_aberturas: 0,
@@ -17,45 +17,70 @@ describe('calcParedCompleto — ISOPANEL EPS 50mm 3x10m', () => {
     });
   });
 
-  test('devuelve tipo pared', () => {
+  test('tipo es pared', () => {
     expect(result.tipo).toBe('pared');
   });
 
-  test('cantidad de paneles es ceil(3 / 1.0) = 3', () => {
+  test('cant_paneles = ceil(3 / 1.0) = 3', () => {
     expect(result.cant_paneles).toBe(3);
   });
 
-  test('subtotal es mayor a 0', () => {
+  test('subtotal > 0', () => {
     expect(result.subtotal).toBeGreaterThan(0);
   });
 
-  test('items incluye paneles, perfil U, kit anclaje, tornillo T2, remache', () => {
-    const descripciones = result.items.map(i => i.descripcion);
-    expect(descripciones.some(d => d.includes('Panel'))).toBe(true);
-    expect(descripciones.some(d => d.includes('Perfil U') || d.includes('solera'))).toBe(true);
-    expect(descripciones.some(d => d.includes('anclaje') || d.includes('Anclaje'))).toBe(true);
-    expect(descripciones.some(d => d.includes('Tornillo') || d.includes('T2'))).toBe(true);
-    expect(descripciones.some(d => d.includes('Remache') || d.includes('POP'))).toBe(true);
+  test('panel SKU es ISD100EPS', () => {
+    const panel = result.items.find(i => i.unidad === 'panel');
+    expect(panel).toBeDefined();
+    expect(panel.sku).toBe('ISD100EPS');
   });
 
-  test('no incluye varilla roscada (solo techo)', () => {
-    const descripciones = result.items.map(i => i.descripcion);
-    expect(descripciones.some(d => d.toLowerCase().includes('varilla'))).toBe(false);
+  test('Perfil U PU100MM presente', () => {
+    expect(result.items.find(i => i.sku === 'PU100MM')).toBeDefined();
+  });
+
+  test('fijaciones TMOME + ARATRAP para metal', () => {
+    const skus = result.items.map(i => i.sku);
+    expect(skus).toContain('TMOME');
+    expect(skus).toContain('ARATRAP');
+  });
+
+  test('remaches RPOP presentes', () => {
+    expect(result.items.find(i => i.sku === 'RPOP')).toBeDefined();
+  });
+
+  test('sellado: Bromplast presente', () => {
+    expect(result.items.find(i => i.sku === 'Bromplast')).toBeDefined();
+  });
+
+  test('sin varilla roscada', () => {
+    const desc = result.items.map(i => i.descripcion.toLowerCase());
+    expect(desc.every(d => !d.includes('varilla'))).toBe(true);
   });
 });
 
-describe('calcParedCompleto — estructura hormigon no incluye tornillo T2', () => {
-  test('sin tornillo T2 cuando estructura es hormigon', () => {
+describe('calcParedCompleto — estructura hormigon sin TMOME', () => {
+  test('estructura hormigon no incluye TMOME ni ARATRAP', () => {
     const result = calcParedCompleto({
       familia: 'ISOWALL_PIR',
       espesor_mm: 50,
       ancho_m: 4,
       largo_m: 3,
-      num_aberturas: 1,
       estructura: 'hormigon',
-      lista_precios: 'venta',
     });
-    const descripciones = result.items.map(i => i.descripcion);
-    expect(descripciones.some(d => d.toLowerCase().includes('tornillo') || d.includes('T2'))).toBe(false);
+    const skus = result.items.map(i => i.sku);
+    expect(skus).not.toContain('TMOME');
+    expect(skus).not.toContain('ARATRAP');
+  });
+});
+
+describe('calcParedCompleto — input por cant_paneles', () => {
+  test('cant_paneles=5 ISOPANEL_EPS 100mm largo=3m funciona', () => {
+    const result = calcParedCompleto({
+      familia: 'ISOPANEL_EPS', espesor_mm: 100, cant_paneles: 5, largo_m: 3,
+    });
+    expect(result.tipo).toBe('pared');
+    expect(result.cant_paneles).toBe(5);
+    expect(result.subtotal).toBeGreaterThan(0);
   });
 });

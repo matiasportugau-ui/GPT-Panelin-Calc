@@ -3,7 +3,7 @@
 const express = require('express');
 const { generarCotizacion } = require('../engines/bom');
 const { tablaAutoportancia, validarAutoportancia } = require('../engines/autoportancia');
-const { catalogoFamilias } = require('../engines/precios');
+const { listFamilies } = require('../data/catalog');
 const { generarPDF } = require('../pdf/generator');
 
 const router = express.Router();
@@ -22,13 +22,13 @@ function cacheCotizacion(cotizacion) {
 
 // GET /health
 router.get('/health', (_req, res) => {
-  res.json({ status: 'ok', service: 'calculadora-bmc', version: '4.1.0' });
+  res.json({ status: 'ok', service: 'calculadora-bmc', version: '5.0.0' });
 });
 
 // GET /api/productos
 router.get('/api/productos', (_req, res) => {
   try {
-    const catalogo = catalogoFamilias();
+    const catalogo = listFamilies();
     res.json({ ok: true, catalogo });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
@@ -54,34 +54,52 @@ router.get('/api/autoportancia', (req, res) => {
 router.post('/api/cotizar', (req, res) => {
   try {
     const {
-      escenario, familia, espesor_mm, ancho_m, largo_m,
+      escenario, familia, espesor_mm,
+      ancho_m, cant_paneles, largo_m,
       lista_precios, apoyos, num_aberturas, estructura,
+      tiene_cumbrera, tiene_canalon, envio_usd,
     } = req.body;
 
     if (!escenario) return res.status(400).json({ ok: false, error: 'Campo requerido: escenario' });
-    if (!familia) return res.status(400).json({ ok: false, error: 'Campo requerido: familia' });
+    if (!familia)   return res.status(400).json({ ok: false, error: 'Campo requerido: familia' });
     if (espesor_mm === undefined || espesor_mm === null || espesor_mm === '') {
       return res.status(400).json({ ok: false, error: 'Campo requerido: espesor_mm' });
-    }
-    if (ancho_m === undefined || ancho_m === null || ancho_m === '') {
-      return res.status(400).json({ ok: false, error: 'Campo requerido: ancho_m' });
     }
     if (largo_m === undefined || largo_m === null || largo_m === '') {
       return res.status(400).json({ ok: false, error: 'Campo requerido: largo_m' });
     }
 
+    // ancho_m OR cant_paneles required
+    const tieneAncho = ancho_m !== undefined && ancho_m !== null && ancho_m !== '';
+    const tieneCant  = cant_paneles !== undefined && cant_paneles !== null && cant_paneles !== '';
+    if (!tieneAncho && !tieneCant) {
+      return res.status(400).json({ ok: false, error: 'Se requiere ancho_m o cant_paneles' });
+    }
+
     const espesorNum = Number(espesor_mm);
-    const anchoNum = Number(ancho_m);
-    const largoNum = Number(largo_m);
+    const largoNum   = Number(largo_m);
 
     if (!Number.isFinite(espesorNum) || espesorNum <= 0) {
       return res.status(400).json({ ok: false, error: 'espesor_mm debe ser un numero finito > 0' });
     }
-    if (!Number.isFinite(anchoNum) || anchoNum <= 0) {
-      return res.status(400).json({ ok: false, error: 'ancho_m debe ser un numero finito > 0' });
-    }
     if (!Number.isFinite(largoNum) || largoNum <= 0) {
       return res.status(400).json({ ok: false, error: 'largo_m debe ser un numero finito > 0' });
+    }
+
+    let anchoNum = null;
+    if (tieneAncho) {
+      anchoNum = Number(ancho_m);
+      if (!Number.isFinite(anchoNum) || anchoNum <= 0) {
+        return res.status(400).json({ ok: false, error: 'ancho_m debe ser un numero finito > 0' });
+      }
+    }
+
+    let cantPanelesNum = null;
+    if (tieneCant) {
+      cantPanelesNum = Number(cant_paneles);
+      if (!Number.isFinite(cantPanelesNum) || cantPanelesNum <= 0) {
+        return res.status(400).json({ ok: false, error: 'cant_paneles debe ser un numero finito > 0' });
+      }
     }
 
     let apoyosNum = 0;
@@ -100,22 +118,27 @@ router.post('/api/cotizar', (req, res) => {
       }
     }
 
-    const listaPreciosNormalizada = lista_precios || 'venta';
-    const listasValidas = ['venta', 'web'];
-    if (!listasValidas.includes(listaPreciosNormalizada)) {
+    const listaPreciosNorm = lista_precios || 'venta';
+    if (!['venta', 'web'].includes(listaPreciosNorm)) {
       return res.status(400).json({ ok: false, error: 'lista_precios invalida. Valores permitidos: venta, web' });
     }
 
     const cotizacion = generarCotizacion({
       escenario, familia,
-      espesor_mm: espesorNum, ancho_m: anchoNum, largo_m: largoNum,
-      lista_precios: listaPreciosNormalizada,
-      apoyos: apoyosNum, num_aberturas: aberturasNum,
+      espesor_mm: espesorNum,
+      ancho_m: anchoNum,
+      cant_paneles: cantPanelesNum,
+      largo_m: largoNum,
+      lista_precios: listaPreciosNorm,
+      apoyos: apoyosNum,
+      num_aberturas: aberturasNum,
       estructura: estructura || 'metal',
+      tiene_cumbrera: !!tiene_cumbrera,
+      tiene_canalon: !!tiene_canalon,
+      envio_usd,
     });
 
     cacheCotizacion(cotizacion);
-
     res.json({ ok: true, cotizacion });
   } catch (err) {
     res.status(400).json({ ok: false, error: err.message });
@@ -123,10 +146,7 @@ router.post('/api/cotizar', (req, res) => {
 });
 
 // POST /api/pdf
-// Accepts EITHER:
-//   1. { cotizacion_data, cliente } - full cotizacion object
-//   2. { cotizacion_id, cliente } - looks up from cache
-//   3. { escenario, familia, espesor_mm, ancho_m, largo_m, ..., cliente } - generates then PDF
+// Accepts: (1) cotizacion_data, (2) cotizacion_id, (3) cotizar params
 router.post('/api/pdf', async (req, res) => {
   try {
     let cotizacion = null;
@@ -134,29 +154,30 @@ router.post('/api/pdf', async (req, res) => {
 
     if (req.body.cotizacion_data) {
       cotizacion = req.body.cotizacion_data;
-    }
-    else if (req.body.cotizacion_id) {
+    } else if (req.body.cotizacion_id) {
       cotizacion = cotizacionCache.get(req.body.cotizacion_id);
       if (!cotizacion) {
-        return res.status(404).json({ ok: false, error: 'Cotizacion ' + req.body.cotizacion_id + ' no encontrada en cache. Regenera la cotizacion con POST /api/cotizar y luego pedi el PDF.' });
+        return res.status(404).json({ ok: false, error: 'Cotizacion ' + req.body.cotizacion_id + ' no encontrada en cache. Regenerá con POST /api/cotizar primero.' });
       }
-    }
-    else if (req.body.escenario && req.body.familia) {
+    } else if (req.body.escenario && req.body.familia) {
       cotizacion = generarCotizacion({
-        escenario: req.body.escenario,
-        familia: req.body.familia,
-        espesor_mm: Number(req.body.espesor_mm),
-        ancho_m: Number(req.body.ancho_m),
-        largo_m: Number(req.body.largo_m),
-        lista_precios: req.body.lista_precios || 'venta',
-        apoyos: Number(req.body.apoyos || 0),
-        num_aberturas: Number(req.body.num_aberturas || 0),
-        estructura: req.body.estructura || 'metal',
+        escenario:      req.body.escenario,
+        familia:        req.body.familia,
+        espesor_mm:     Number(req.body.espesor_mm),
+        ancho_m:        req.body.ancho_m != null ? Number(req.body.ancho_m) : null,
+        cant_paneles:   req.body.cant_paneles != null ? Number(req.body.cant_paneles) : null,
+        largo_m:        Number(req.body.largo_m),
+        lista_precios:  req.body.lista_precios || 'venta',
+        apoyos:         Number(req.body.apoyos || 0),
+        num_aberturas:  Number(req.body.num_aberturas || 0),
+        estructura:     req.body.estructura || 'metal',
+        tiene_cumbrera: !!req.body.tiene_cumbrera,
+        tiene_canalon:  !!req.body.tiene_canalon,
+        envio_usd:      req.body.envio_usd,
       });
       cacheCotizacion(cotizacion);
-    }
-    else {
-      return res.status(400).json({ ok: false, error: 'Envia cotizacion_id, cotizacion_data, o los parametros de cotizacion (escenario, familia, espesor_mm, ancho_m, largo_m).' });
+    } else {
+      return res.status(400).json({ ok: false, error: 'Envia cotizacion_id, cotizacion_data, o los parametros de cotizacion.' });
     }
 
     const pdfBuffer = await generarPDF(cotizacion, cliente);

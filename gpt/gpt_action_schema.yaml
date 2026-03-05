@@ -1,8 +1,8 @@
 openapi: "3.1.0"
 info:
   title: Calculadora BMC API
-  description: Motor programático de cálculo para paneles Panelin — BMC Uruguay. Fuente única de verdad para precios, BOM, autoportancia y PDF.
-  version: "4.1.1"
+  description: Motor programático de cálculo para paneles Panelin — BMC Uruguay. BOM con SKUs reales del catálogo, precios reales, IVA 22%. Fuente única de verdad.
+  version: "5.0.0"
 servers:
   - url: "https://calculadora-five-sand.vercel.app"
     description: Producción
@@ -11,7 +11,7 @@ paths:
   /api/cotizar:
     post:
       operationId: cotizar
-      summary: Genera una cotización completa con BOM detallado, precios, IVA 22% y warnings de autoportancia
+      summary: Genera cotización completa con BOM (SKUs reales), precios, IVA 22% y warnings de autoportancia
       requestBody:
         required: true
         content:
@@ -31,8 +31,8 @@ paths:
   /api/pdf:
     post:
       operationId: generarPDF
-      summary: Genera un PDF descargable de una cotización ya generada
-      description: Requiere el objeto cotización completo retornado por POST /api/cotizar en el campo cotizacion_data. Opcionalmente incluir datos del cliente.
+      summary: Genera PDF descargable de una cotización
+      description: "Acepta 3 formas: (1) cotizacion_id del resultado previo, (2) cotizacion_data completa, (3) los mismos parámetros de /api/cotizar para generar y descargar en un paso."
       requestBody:
         required: true
         content:
@@ -51,10 +51,10 @@ paths:
   /api/productos:
     get:
       operationId: listarProductos
-      summary: Lista el catálogo actual de familias y espesores disponibles. SIEMPRE usar esto en vez de recitar de memoria.
+      summary: Lista el catálogo real de familias y espesores disponibles. SIEMPRE usar esto en vez de recitar de memoria.
       responses:
         "200":
-          description: Catálogo de productos con familias y espesores
+          description: Catálogo de productos
           content:
             application/json:
               schema:
@@ -63,8 +63,7 @@ paths:
   /api/autoportancia:
     get:
       operationId: validarAutoportancia
-      summary: Valida luz máxima o devuelve tabla completa de autoportancia. SIEMPRE usar esto para datos técnicos de luz.
-      description: Sin parámetros devuelve tabla completa. Con los 3 parámetros valida un caso específico.
+      summary: Valida luz máxima o devuelve tabla completa. SIEMPRE usar para datos técnicos de luz.
       parameters:
         - name: familia
           in: query
@@ -84,10 +83,6 @@ paths:
       responses:
         "200":
           description: Resultado de validación o tabla completa
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AutoportanciaResponse'
 
   /health:
     get:
@@ -105,26 +100,29 @@ components:
         - escenario
         - familia
         - espesor_mm
-        - ancho_m
         - largo_m
+      description: "Se requiere ancho_m O cant_paneles (al menos uno). cant_paneles es útil cuando el cliente dice '10 paneles de 4.5m'."
       properties:
         escenario:
           type: string
           enum: [solo_techo, solo_fachada, techo_fachada, camara_frigorifica]
-          description: "solo_techo: cubierta. solo_fachada: paredes. techo_fachada: ambos (misma familia). camara_frigorifica: techo + 4 paredes (altura fija 3m)."
+          description: "solo_techo: cubierta. solo_fachada: paredes. techo_fachada: ambos. camara_frigorifica: techo + 4 paredes (altura fija 3m)."
         familia:
           type: string
-          enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOPANEL_EPS, ISOWALL_PIR]
-          description: Familia de panel. Consultar GET /api/productos para ver espesores disponibles por familia.
+          enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOROOF_FOIL, ISOROOF_PLUS, ISOPANEL_EPS, ISOWALL_PIR, ISOFRIG_PIR]
+          description: "Familia de panel. Consultar GET /api/productos para ver espesores disponibles."
         espesor_mm:
           type: number
-          description: Espesor del panel en mm. Debe existir en la familia seleccionada.
+          description: Espesor del panel en mm.
         ancho_m:
           type: number
-          description: Ancho del área en metros
+          description: "Ancho del área en metros. Alternativo a cant_paneles."
+        cant_paneles:
+          type: number
+          description: "Cantidad de paneles. Alternativo a ancho_m. Usar cuando el cliente dice 'X paneles de Y metros'."
         largo_m:
           type: number
-          description: Largo del área en metros
+          description: Largo de cada panel en metros.
         lista_precios:
           type: string
           enum: [venta, web]
@@ -134,15 +132,26 @@ components:
           type: number
           default: 0
           description: "Apoyos intermedios (solo techo). Reduce luz efectiva: luz = largo / (apoyos + 1)"
+        tiene_cumbrera:
+          type: boolean
+          default: false
+          description: "true si el techo tiene cumbrera (2 aguas). Agrega la pieza de cumbrera al BOM."
+        tiene_canalon:
+          type: boolean
+          default: false
+          description: "true si el techo tiene canalón en el borde inferior. Agrega canalón + soporte al BOM."
         num_aberturas:
           type: number
           default: 0
-          description: Cantidad de aberturas (puertas/ventanas, solo fachada)
+          description: "Cantidad de puertas/ventanas (solo fachada)."
         estructura:
           type: string
           enum: [metal, hormigon, mixto]
           default: metal
-          description: Tipo de estructura. Afecta tornillería en fachada (5.5 T2/m² para metal/mixto).
+          description: "Tipo de estructura. Afecta fijaciones en fachada (5.5 tornillos/m² para metal/mixto)."
+        envio_usd:
+          type: number
+          description: "Costo de envío en USD. Solo incluir si el cliente lo solicita y ya fue cotizado aparte. Si no se pasa, el envío NO aparece en la respuesta."
 
     CotizarResponse:
       type: object
@@ -167,17 +176,24 @@ components:
               type: string
             secciones:
               type: array
-              description: "Cada sección tiene: tipo (techo|pared|pared_frontal_posterior|pared_lateral), items[], subtotal"
+              description: "Cada sección: tipo (techo|pared|...), items[] con SKU real, subtotal."
               items:
                 type: object
                 properties:
                   tipo:
                     type: string
+                  cant_paneles:
+                    type: number
+                  area_m2:
+                    type: number
                   items:
                     type: array
                     items:
                       type: object
                       properties:
+                        sku:
+                          type: string
+                          description: SKU real del catálogo BMC Uruguay
                         descripcion:
                           type: string
                         cantidad:
@@ -192,7 +208,6 @@ components:
                     type: number
             resumen:
               type: object
-              description: Totales finales. Presentar SIEMPRE el desglose completo.
               properties:
                 subtotal_sin_iva:
                   type: number
@@ -204,61 +219,61 @@ components:
                   type: string
             warnings:
               type: array
-              description: Advertencias de autoportancia u otras. Mostrar al cliente SIEMPRE.
               items:
                 type: string
-            envio_referencia_usd:
+            envio_usd:
               type: number
-              description: Costo referencial de envío en USD
+              description: "Solo presente si se pasó envio_usd en el request."
             nota:
               type: string
 
     PDFRequest:
       type: object
-      description: "Acepta 3 formas: (1) cotizacion_id del resultado previo de /api/cotizar, (2) cotizacion_data completa, (3) los mismos parametros de /api/cotizar para generar y descargar en un paso."
+      description: "Acepta 3 formas: (1) cotizacion_id, (2) cotizacion_data, (3) params de cotización."
       properties:
         cotizacion_id:
           type: string
-          description: "UUID de una cotizacion generada previamente con POST /api/cotizar. Forma mas simple."
         cotizacion_data:
           type: object
-          description: "Objeto completo cotizacion retornado por POST /api/cotizar (alternativa a cotizacion_id)"
         escenario:
           type: string
-          enum: [solo_techo, solo_fachada, techo_fachada, camara_frigorifica]
-          description: "Si no tenes cotizacion_id ni cotizacion_data, pasa los mismos params que /api/cotizar"
         familia:
           type: string
-          enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOPANEL_EPS, ISOWALL_PIR]
         espesor_mm:
           type: number
         ancho_m:
+          type: number
+        cant_paneles:
           type: number
         largo_m:
           type: number
         lista_precios:
           type: string
-          enum: [venta, web]
           default: venta
         apoyos:
           type: number
           default: 0
+        tiene_cumbrera:
+          type: boolean
+          default: false
+        tiene_canalon:
+          type: boolean
+          default: false
         num_aberturas:
           type: number
           default: 0
         estructura:
           type: string
-          enum: [metal, hormigon, mixto]
           default: metal
+        envio_usd:
+          type: number
         cliente:
           type: object
-          description: Datos opcionales del cliente para incluir en el PDF
           properties:
             nombre:
               type: string
             celular:
               type: string
-              description: Formato 09XXXXXXX (Uruguay)
             direccion:
               type: string
 
@@ -278,18 +293,7 @@ components:
                 type: array
                 items:
                   type: number
-
-    AutoportanciaResponse:
-      type: object
-      properties:
-        ok:
-          type: boolean
-        valido:
-          type: boolean
-        luz_max:
-          type: number
-        mensaje:
-          type: string
-        tabla:
-          type: object
-          description: Tabla completa de luces máximas por familia y espesor (cuando se consulta sin parámetros)
+              composicion:
+                type: string
+              nota:
+                type: string
