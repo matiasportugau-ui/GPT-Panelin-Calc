@@ -38,7 +38,7 @@ curl -X POST https://calculadora-bmc.vercel.app/api/cotizar \
 ### Pasos
 1. Ir a https://platform.openai.com/gpts
 2. Crear nuevo GPT o editar el existente
-3. En **Instructions**: pegar contenido de `gpt/Panelin_GPT_config_v4.json`
+3. En **Instructions**: pegar contenido de `gpt/Panelin_GPT_config_v5.json`
 4. En **Actions** → **Add Action**:
    - Pegar contenido de `gpt/gpt_action_schema.yaml`
    - Verificar que `servers.url` apunte a tu URL de Vercel

@@ -7,6 +7,7 @@ const { getPanelInfo, getAccessoryInfo } = require('../data/catalog');
 const PERFIL_U_SKU = {
   40:  'PU50MM',   // ISOFRIG 40mm
   50:  'PU50MM',   // closest available (no PU for 50mm wall panels)
+  60:  'PU50MM',   // ISOFRIG 60mm — closest available profile
   80:  'PU100MM',  // closest above 80mm
   100: 'PU100MM',
   150: 'PU150MM',

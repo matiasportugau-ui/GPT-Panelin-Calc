@@ -257,6 +257,38 @@ describe('POST /api/cotizar', () => {
     expect(res.status).toBe(400);
     expect(res.body.ok).toBe(false);
   });
+
+  test('400 cuando se envían ancho_m y cant_paneles simultáneamente', async () => {
+    const res = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: 5,
+        cant_paneles: 5,
+        largo_m: 11,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/simultaneamente/);
+  });
+
+  test('tiene_cumbrera string "false" no agrega cumbrera', async () => {
+    const res = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISOROOF_3G',
+        espesor_mm: 50,
+        ancho_m: 4,
+        largo_m: 8,
+        tiene_cumbrera: 'false',
+      });
+    expect(res.status).toBe(200);
+    const skus = res.body.cotizacion.secciones[0].items.map(i => i.sku);
+    expect(skus).not.toContain('CUMROOF3M');
+  });
 });
 
 describe('POST /api/pdf', () => {

@@ -106,7 +106,14 @@ components:
         - familia
         - espesor_mm
         - largo_m
-      description: "Se requiere ancho_m o cant_paneles (no ambos son obligatorios simultáneamente). Si el cliente dice 'X paneles de Y metros', usar cant_paneles + largo_m."
+      description: "Se requiere ancho_m o cant_paneles (exactamente uno, no ambos). Si el cliente dice 'X paneles de Y metros', usar cant_paneles + largo_m."
+      oneOf:
+        - required: [ancho_m]
+          not:
+            required: [cant_paneles]
+        - required: [cant_paneles]
+          not:
+            required: [ancho_m]
       properties:
         escenario:
           type: string

@@ -43,7 +43,7 @@
 ```
 GPT-Panelin-Calc/
 ├── gpt/                    # Cerebro conversacional
-│   ├── Panelin_GPT_config_v4.json
+│   ├── Panelin_GPT_config_v5.json
 │   ├── gpt_action_schema.yaml
 │   └── kb/
 │       ├── PANELIN_TRAINING_GUIDE.md

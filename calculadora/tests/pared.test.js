@@ -101,6 +101,20 @@ describe('calcParedCompleto — ISOFRIG PIR 40mm usa PU50MM', () => {
   });
 });
 
+describe('calcParedCompleto — ISOFRIG PIR 60mm usa PU50MM', () => {
+  test('perfil U SKU es PU50MM para 60mm ISOFRIG', () => {
+    const result = calcParedCompleto({
+      familia: 'ISOFRIG_PIR',
+      espesor_mm: 60,
+      ancho_m: 4,
+      largo_m: 3,
+      estructura: 'metal',
+    });
+    const item = result.items.find(i => i.sku === 'PU50MM');
+    expect(item).toBeDefined();
+  });
+});
+
 describe('calcParedCompleto — input por cant_paneles', () => {
   test('cant_paneles=5, largo_m=3, ISOWALL_PIR 80mm', () => {
     const result = calcParedCompleto({

@@ -100,7 +100,7 @@ servers:
     description: Producción Vercel
 ```
 
-También actualizar `gpt/Panelin_GPT_config_v4.json`:
+También actualizar `gpt/Panelin_GPT_config_v5.json`:
 
 ```json
 "calculadora_api": {
@@ -114,7 +114,7 @@ También actualizar `gpt/Panelin_GPT_config_v4.json`:
 
 1. Ir a [https://platform.openai.com/gpts](https://platform.openai.com/gpts)
 2. Crear nuevo GPT (o editar el existente si ya tenés uno)
-3. En **Instructions**: pegar el contenido completo de `gpt/Panelin_GPT_config_v4.json`
+3. En **Instructions**: pegar el contenido completo de `gpt/Panelin_GPT_config_v5.json`
 4. En **Knowledge**: subir los dos archivos de `gpt/kb/`:
    - `PANELIN_TRAINING_GUIDE.md`
    - `PANELIN_QUOTATION_PROCESS.md`
