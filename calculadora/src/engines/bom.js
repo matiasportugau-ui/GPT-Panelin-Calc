@@ -48,6 +48,25 @@ function generarCotizacion(params) {
     throw new Error(`Escenario inválido: ${escenario}. Válidos: ${ESCENARIOS_VALIDOS.join(', ')}`);
   }
 
+  // Domain validation: require exactly one of ancho_m or cant_paneles with valid values
+  const hasAncho = ancho_m !== undefined && ancho_m !== null;
+  const hasCantP = cant_paneles !== undefined && cant_paneles !== null;
+  if (!hasAncho && !hasCantP) {
+    throw new Error('Se requiere ancho_m o cant_paneles');
+  }
+  if (hasAncho && hasCantP) {
+    throw new Error('No se pueden enviar simultaneamente ancho_m y cant_paneles; use solo uno de los dos');
+  }
+  if (hasAncho && (!Number.isFinite(Number(ancho_m)) || Number(ancho_m) <= 0)) {
+    throw new Error('ancho_m debe ser un numero finito > 0');
+  }
+  if (hasCantP && (!Number.isFinite(Number(cant_paneles)) || Number(cant_paneles) <= 0)) {
+    throw new Error('cant_paneles debe ser un numero finito > 0');
+  }
+  if (!Number.isFinite(Number(largo_m)) || Number(largo_m) <= 0) {
+    throw new Error('largo_m debe ser un numero finito > 0');
+  }
+
   const warnings = [];
   const secciones = [];
 
