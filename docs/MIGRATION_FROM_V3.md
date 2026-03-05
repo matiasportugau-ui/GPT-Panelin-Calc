@@ -43,7 +43,7 @@ Los dos repositorios originales se bloqueaban entre sí:
 ## Guía de Migración
 
 ### Si tenías el GPT configurado
-1. Reemplazar instrucciones con `gpt/Panelin_GPT_config_v4.json`
+1. Reemplazar instrucciones con `gpt/Panelin_GPT_config_v5.json`
 2. Agregar GPT Action usando `gpt/gpt_action_schema.yaml`
 3. Apuntar Action a tu instancia de la Calculadora API
 

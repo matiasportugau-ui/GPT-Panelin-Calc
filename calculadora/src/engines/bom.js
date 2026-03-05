@@ -9,7 +9,23 @@ const { ivaRate } = require('../data/catalog');
 const ESCENARIOS_VALIDOS = ['solo_techo', 'solo_fachada', 'techo_fachada', 'camara_frigorifica'];
 
 /**
- * Orquestador principal. Genera una cotizacion completa segun el escenario.
+ * Orquestador principal. Genera una cotización completa según el escenario.
+ *
+ * @param {Object} params
+ * @param {'solo_techo'|'solo_fachada'|'techo_fachada'|'camara_frigorifica'} params.escenario
+ * @param {string}  params.familia
+ * @param {number}  params.espesor_mm
+ * @param {number}  [params.ancho_m]         - Ancho en metros (alternativo a cant_paneles)
+ * @param {number}  [params.cant_paneles]     - Cantidad de paneles (alternativo a ancho_m)
+ * @param {number}  params.largo_m
+ * @param {'venta'|'web'} [params.lista_precios]
+ * @param {number}  [params.apoyos]
+ * @param {number}  [params.num_aberturas]
+ * @param {string}  [params.estructura]
+ * @param {boolean} [params.tiene_cumbrera]
+ * @param {boolean} [params.tiene_canalon]
+ * @param {number}  [params.envio_usd]        - Costo de envío en USD (solo incluido si se proporciona)
+ * @returns {Object} Cotización completa con IVA y warnings
  */
 function generarCotizacion(params) {
   const {
@@ -17,39 +33,52 @@ function generarCotizacion(params) {
     familia,
     espesor_mm,
     ancho_m,
-    largo_m,
     cant_paneles,
+    largo_m,
     lista_precios = 'venta',
     apoyos = 0,
     num_aberturas = 0,
     estructura = 'metal',
     tiene_cumbrera = false,
-    tiene_canalon = true,
+    tiene_canalon = false,
     envio_usd,
   } = params;
 
   if (!ESCENARIOS_VALIDOS.includes(escenario)) {
-    throw new Error(`Escenario invalido: ${escenario}. Validos: ${ESCENARIOS_VALIDOS.join(', ')}`);
+    throw new Error(`Escenario inválido: ${escenario}. Válidos: ${ESCENARIOS_VALIDOS.join(', ')}`);
+  }
+
+  // Domain validation: require exactly one of ancho_m or cant_paneles with valid values
+  const hasAncho = ancho_m !== undefined && ancho_m !== null;
+  const hasCantP = cant_paneles !== undefined && cant_paneles !== null;
+  if (!hasAncho && !hasCantP) {
+    throw new Error('Se requiere ancho_m o cant_paneles');
+  }
+  if (hasAncho && hasCantP) {
+    throw new Error('No se pueden enviar simultaneamente ancho_m y cant_paneles; use solo uno de los dos');
+  }
+  if (hasAncho && (!Number.isFinite(Number(ancho_m)) || Number(ancho_m) <= 0)) {
+    throw new Error('ancho_m debe ser un numero finito > 0');
+  }
+  if (hasCantP && (!Number.isFinite(Number(cant_paneles)) || Number(cant_paneles) <= 0)) {
+    throw new Error('cant_paneles debe ser un numero finito > 0');
+  }
+  if (!Number.isFinite(Number(largo_m)) || Number(largo_m) <= 0) {
+    throw new Error('largo_m debe ser un numero finito > 0');
   }
 
   const warnings = [];
   const secciones = [];
 
-  // Autoportancia validation
+  // Autoportancia validation: uses the actual span (luz), not total length
   const luzReal = apoyos > 0 ? largo_m / (apoyos + 1) : largo_m;
   const autop = validarAutoportancia(familia, espesor_mm, luzReal);
   if (!autop.valido) {
     warnings.push(autop.mensaje);
   }
 
-  const techoParams = {
-    familia, espesor_mm, ancho_m, largo_m, cant_paneles,
-    apoyos, tiene_cumbrera, tiene_canalon, lista_precios,
-  };
-  const paredParams = {
-    familia, espesor_mm, ancho_m, largo_m, cant_paneles,
-    num_aberturas, estructura, lista_precios,
-  };
+  const techoParams = { familia, espesor_mm, ancho_m, cant_paneles, largo_m, apoyos, lista_precios, tiene_cumbrera, tiene_canalon };
+  const paredParams = { familia, espesor_mm, ancho_m, cant_paneles, largo_m, num_aberturas, estructura, lista_precios };
 
   if (escenario === 'solo_techo' || escenario === 'techo_fachada') {
     secciones.push(calcTechoCompleto(techoParams));
@@ -61,16 +90,24 @@ function generarCotizacion(params) {
 
   if (escenario === 'camara_frigorifica') {
     secciones.push(calcTechoCompleto(techoParams));
-    const alto_m = 3;
+
+    const alto_m = 3; // fixed height for cold room
     const paredFrontal = calcParedCompleto({
-      familia, espesor_mm, ancho_m, largo_m: alto_m,
-      num_aberturas, estructura, lista_precios,
+      ...paredParams,
+      largo_m: alto_m,
     });
     paredFrontal.tipo = 'pared_frontal_posterior';
     secciones.push(paredFrontal);
+
     const paredLateral = calcParedCompleto({
-      familia, espesor_mm, ancho_m: largo_m, largo_m: alto_m,
-      num_aberturas: 0, estructura, lista_precios,
+      familia,
+      espesor_mm,
+      ancho_m: largo_m,
+      cant_paneles: undefined,
+      largo_m: alto_m,
+      num_aberturas: 0,
+      estructura,
+      lista_precios,
     });
     paredLateral.tipo = 'pared_lateral';
     secciones.push(paredLateral);
@@ -80,7 +117,7 @@ function generarCotizacion(params) {
   const iva = subtotal_sin_iva * ivaRate();
   const total_con_iva = subtotal_sin_iva + iva;
 
-  const result = {
+  const cotizacion = {
     cotizacion_id: uuidv4(),
     fecha: new Date().toISOString().split('T')[0],
     escenario,
@@ -98,12 +135,12 @@ function generarCotizacion(params) {
     nota: 'Precios sin IVA. IVA 22% aplicado al total final. Consultar disponibilidad de stock.',
   };
 
-  // Only include envio if explicitly provided
+  // Only include envio_usd if explicitly provided
   if (envio_usd !== undefined && envio_usd !== null) {
-    result.envio_usd = Number(envio_usd);
+    cotizacion.envio_usd = Number(envio_usd);
   }
 
-  return result;
+  return cotizacion;
 }
 
 module.exports = { generarCotizacion };

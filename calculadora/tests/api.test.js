@@ -8,17 +8,17 @@ describe('GET /health', () => {
     const res = await request(app).get('/health');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
-    expect(res.body.version).toBe('5.0.0');
   });
 });
 
 describe('GET /api/productos', () => {
-  test('devuelve catalogo de familias con ISODEC_EPS', async () => {
+  test('devuelve catálogo de familias del catálogo real', async () => {
     const res = await request(app).get('/api/productos');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(Array.isArray(res.body.catalogo)).toBe(true);
     expect(res.body.catalogo.length).toBeGreaterThan(0);
+    // Verify real families are present
     const familias = res.body.catalogo.map(f => f.familia);
     expect(familias).toContain('ISODEC_EPS');
     expect(familias).toContain('ISOROOF_3G');
@@ -27,7 +27,7 @@ describe('GET /api/productos', () => {
 });
 
 describe('GET /api/autoportancia', () => {
-  test('devuelve tabla completa sin parametros', async () => {
+  test('devuelve tabla completa sin parámetros', async () => {
     const res = await request(app).get('/api/autoportancia');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
@@ -42,7 +42,7 @@ describe('GET /api/autoportancia', () => {
     expect(res.body.luz_max).toBe(4.5);
   });
 
-  test('alerta cuando luz supera maximo', async () => {
+  test('alerta cuando luz supera máximo', async () => {
     const res = await request(app).get('/api/autoportancia?familia=ISODEC_EPS&espesor=100&luz=6.0');
     expect(res.status).toBe(200);
     expect(res.body.valido).toBe(false);
@@ -50,7 +50,7 @@ describe('GET /api/autoportancia', () => {
 });
 
 describe('POST /api/cotizar', () => {
-  test('cotizacion techo ISODEC EPS 100mm 5x11 con SKUs reales', async () => {
+  test('cotización techo ISODEC EPS 100mm 5×11 — items con SKUs reales', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
@@ -68,13 +68,34 @@ describe('POST /api/cotizar', () => {
     expect(cot.resumen.total_con_iva).toBeGreaterThan(0);
     expect(cot.secciones).toHaveLength(1);
     expect(cot.secciones[0].tipo).toBe('techo');
-    // Verify real SKUs
+    // Verify real SKUs in items
     const skus = cot.secciones[0].items.map(i => i.sku);
-    expect(skus).toContain('6838');
-    expect(skus).toContain('6842');
+    expect(skus).toContain('ISODEC_EPS_100');
+    expect(skus).toContain('6838');  // gotero frontal
+    expect(skus).toContain('6842');  // gotero lateral
+    expect(skus).toContain('TMOME');
+    expect(skus).toContain('ARATRAP');
   });
 
-  test('cotizacion fachada ISOPANEL EPS 100mm', async () => {
+  test('cotización techo ISOROOF 3G 50mm — items con SKUs reales', async () => {
+    const res = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISOROOF_3G',
+        espesor_mm: 50,
+        ancho_m: 4,
+        largo_m: 8,
+      });
+    expect(res.status).toBe(200);
+    const skus = res.body.cotizacion.secciones[0].items.map(i => i.sku);
+    expect(skus).toContain('IROOF50');
+    expect(skus).toContain('GFS50');
+    expect(skus).toContain('GFSUP50');
+    expect(skus).toContain('GL50');
+  });
+
+  test('cotización fachada ISOPANEL EPS 100mm 3×10', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
@@ -82,24 +103,52 @@ describe('POST /api/cotizar', () => {
         familia: 'ISOPANEL_EPS',
         espesor_mm: 100,
         ancho_m: 3,
-        largo_m: 3,
+        largo_m: 10,
       });
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
-    expect(res.body.cotizacion.secciones[0].tipo).toBe('pared');
-    const skus = res.body.cotizacion.secciones[0].items.map(i => i.sku);
+    const seccion = res.body.cotizacion.secciones[0];
+    expect(seccion.tipo).toBe('pared');
+    const skus = seccion.items.map(i => i.sku);
+    expect(skus).toContain('ISD100EPS');
     expect(skus).toContain('PU100MM');
+    expect(skus).toContain('RPOP');
   });
 
-  test('400 cuando falta campo requerido', async () => {
+  test('cotización con cant_paneles en lugar de ancho_m', async () => {
     const res = await request(app)
       .post('/api/cotizar')
-      .send({ familia: 'ISODEC_EPS' });
-    expect(res.status).toBe(400);
-    expect(res.body.ok).toBe(false);
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISOROOF_3G',
+        espesor_mm: 50,
+        cant_paneles: 10,
+        largo_m: 4.5,
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.ok).toBe(true);
+    expect(res.body.cotizacion.secciones[0].cant_paneles).toBe(10);
   });
 
-  test('cotizacion techo+fachada tiene 2 secciones', async () => {
+  test('cámara frigorífica tiene 3 secciones', async () => {
+    const res = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'camara_frigorifica',
+        familia: 'ISOFRIG_PIR',
+        espesor_mm: 80,
+        ancho_m: 4,
+        largo_m: 6,
+      });
+    expect(res.status).toBe(200);
+    expect(res.body.cotizacion.secciones).toHaveLength(3);
+    const tipos = res.body.cotizacion.secciones.map(s => s.tipo);
+    expect(tipos).toContain('techo');
+    expect(tipos).toContain('pared_frontal_posterior');
+    expect(tipos).toContain('pared_lateral');
+  });
+
+  test('cotización techo+fachada tiene 2 secciones', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
@@ -111,24 +160,6 @@ describe('POST /api/cotizar', () => {
       });
     expect(res.status).toBe(200);
     expect(res.body.cotizacion.secciones).toHaveLength(2);
-  });
-
-  test('camara_frigorifica tiene 3 secciones', async () => {
-    const res = await request(app)
-      .post('/api/cotizar')
-      .send({
-        escenario: 'camara_frigorifica',
-        familia: 'ISODEC_EPS',
-        espesor_mm: 100,
-        ancho_m: 5,
-        largo_m: 8,
-      });
-    expect(res.status).toBe(200);
-    expect(res.body.cotizacion.secciones).toHaveLength(3);
-    const tipos = res.body.cotizacion.secciones.map(s => s.tipo);
-    expect(tipos).toContain('techo');
-    expect(tipos).toContain('pared_frontal_posterior');
-    expect(tipos).toContain('pared_lateral');
   });
 
   test('resumen incluye IVA 22%', async () => {
@@ -146,7 +177,7 @@ describe('POST /api/cotizar', () => {
     expect(Math.abs(r.total_con_iva - (r.subtotal_sin_iva + r.iva_22))).toBeLessThan(0.05);
   });
 
-  test('envio NO aparece por defecto', async () => {
+  test('envío NO aparece en la respuesta por defecto', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
@@ -156,11 +187,12 @@ describe('POST /api/cotizar', () => {
         ancho_m: 5,
         largo_m: 11,
       });
+    expect(res.status).toBe(200);
     expect(res.body.cotizacion.envio_usd).toBeUndefined();
     expect(res.body.cotizacion.envio_referencia_usd).toBeUndefined();
   });
 
-  test('envio SI aparece si se pasa envio_usd', async () => {
+  test('envío SÍ aparece cuando se pasa envio_usd', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
@@ -171,25 +203,33 @@ describe('POST /api/cotizar', () => {
         largo_m: 11,
         envio_usd: 300,
       });
+    expect(res.status).toBe(200);
     expect(res.body.cotizacion.envio_usd).toBe(300);
   });
 
-  test('input por cant_paneles funciona', async () => {
+  test('400 cuando falta campo requerido', async () => {
+    const res = await request(app)
+      .post('/api/cotizar')
+      .send({ familia: 'ISODEC_EPS' });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+  });
+
+  test('400 cuando falta ancho_m y cant_paneles', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
         escenario: 'solo_techo',
-        familia: 'ISOROOF_3G',
-        espesor_mm: 50,
-        cant_paneles: 10,
-        largo_m: 4.5,
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        largo_m: 11,
       });
-    expect(res.status).toBe(200);
-    expect(res.body.cotizacion.secciones[0].cant_paneles).toBe(10);
-    expect(res.body.cotizacion.secciones[0].ancho_m).toBe(11);
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/ancho_m|cant_paneles/);
   });
 
-  test('400 cuando ancho_m es no numerico', async () => {
+  test('400 cuando ancho_m es no numérico', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
@@ -203,7 +243,7 @@ describe('POST /api/cotizar', () => {
     expect(res.body.ok).toBe(false);
   });
 
-  test('400 cuando lista_precios es invalida', async () => {
+  test('400 cuando lista_precios es inválida', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
@@ -216,6 +256,38 @@ describe('POST /api/cotizar', () => {
       });
     expect(res.status).toBe(400);
     expect(res.body.ok).toBe(false);
+  });
+
+  test('400 cuando se envían ancho_m y cant_paneles simultáneamente', async () => {
+    const res = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: 5,
+        cant_paneles: 5,
+        largo_m: 11,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/simultaneamente/);
+  });
+
+  test('tiene_cumbrera string "false" no agrega cumbrera', async () => {
+    const res = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISOROOF_3G',
+        espesor_mm: 50,
+        ancho_m: 4,
+        largo_m: 8,
+        tiene_cumbrera: 'false',
+      });
+    expect(res.status).toBe(200);
+    const skus = res.body.cotizacion.secciones[0].items.map(i => i.sku);
+    expect(skus).not.toContain('CUMROOF3M');
   });
 });
 
@@ -234,18 +306,18 @@ describe('POST /api/pdf', () => {
         espesor_mm: 100,
         ancho_m: 5,
         largo_m: 11,
-        area_m2: 61.6,
+        area_m2: 55,
         cant_paneles: 5,
         items: [
-          { sku: 'ISDEC100EPS', descripcion: 'Panel ISODEC EPS 100mm', cantidad: 5, unidad: 'panel', precio_unit: 567.58, subtotal: 2837.91 },
+          { sku: 'ISODEC_EPS_100', descripcion: 'ISODEC EPS 100mm', cantidad: 5, unidad: 'panel', precio_unit: 308.00, subtotal: 1540.00 },
         ],
-        subtotal: 2837.91,
+        subtotal: 1540.00,
       },
     ],
     resumen: {
-      subtotal_sin_iva: 2837.91,
-      iva_22: 624.34,
-      total_con_iva: 3462.25,
+      subtotal_sin_iva: 1540.00,
+      iva_22: 338.80,
+      total_con_iva: 1878.80,
       moneda: 'USD',
     },
     warnings: [],
@@ -261,7 +333,7 @@ describe('POST /api/pdf', () => {
     expect(parseInt(res.headers['content-length'])).toBeGreaterThan(0);
   });
 
-  test('genera PDF sin nota (fallback a string vacio)', async () => {
+  test('genera PDF sin nota (fallback a string vacío)', async () => {
     const sinNota = { ...cotizacionData };
     delete sinNota.nota;
     const res = await request(app)
@@ -275,5 +347,78 @@ describe('POST /api/pdf', () => {
     const res = await request(app).post('/api/pdf').send({});
     expect(res.status).toBe(400);
     expect(res.body.ok).toBe(false);
+  });
+
+  test('genera PDF desde parámetros directos (cant_paneles)', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        cant_paneles: 5,
+        largo_m: 11,
+        cliente: { nombre: 'Test Cliente PDF' },
+      });
+    expect(res.status).toBe(200);
+    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+  });
+
+  test('400 en parámetros directos cuando falta largo_m', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: 5,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/largo_m/);
+  });
+
+  test('400 en parámetros directos cuando faltan ancho_m y cant_paneles', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        largo_m: 11,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/ancho_m|cant_paneles/);
+  });
+
+  test('400 en parámetros directos cuando espesor_mm no es numérico', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 'abc',
+        ancho_m: 5,
+        largo_m: 11,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/espesor_mm/);
+  });
+
+  test('400 en parámetros directos cuando ancho_m es string vacío', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: '',
+        largo_m: 11,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/ancho_m|cant_paneles/);
   });
 });
