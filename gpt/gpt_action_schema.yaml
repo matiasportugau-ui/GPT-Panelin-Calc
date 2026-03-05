@@ -1,17 +1,17 @@
 openapi: "3.1.0"
 info:
   title: Calculadora BMC API
-  description: Motor programático de cálculo para paneles Panelin — BMC Uruguay
-  version: "4.0.0"
+  description: Motor programático de cálculo para paneles Panelin — BMC Uruguay. Fuente única de verdad para precios, BOM, autoportancia y PDF.
+  version: "4.1.0"
 servers:
-  - url: https://calculadora-bmc.vercel.app
-    description: Producción Vercel
+  - url: "https://calculadora-five-sand.vercel.app"
+    description: Producción
 
 paths:
   /api/cotizar:
     post:
       operationId: cotizar
-      summary: Genera una cotización completa con BOM, precios e IVA
+      summary: Genera una cotización completa con BOM detallado, precios, IVA 22% y warnings de autoportancia
       requestBody:
         required: true
         content:
@@ -20,18 +20,19 @@ paths:
               $ref: '#/components/schemas/CotizarRequest'
       responses:
         "200":
-          description: Cotización generada correctamente
+          description: Cotización generada. Presentar valores EXACTOS al cliente sin modificar.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/CotizarResponse'
         "400":
-          description: Parámetros inválidos o faltantes
+          description: Parámetros inválidos o faltantes. Mostrar error.message al cliente.
 
   /api/pdf:
     post:
       operationId: generarPDF
-      summary: Genera un PDF descargable de una cotización
+      summary: Genera un PDF descargable de una cotización ya generada
+      description: Requiere el objeto cotización completo retornado por POST /api/cotizar en el campo cotizacion_data. Opcionalmente incluir datos del cliente.
       requestBody:
         required: true
         content:
@@ -50,10 +51,10 @@ paths:
   /api/productos:
     get:
       operationId: listarProductos
-      summary: Lista el catálogo de familias y espesores disponibles
+      summary: Lista el catálogo actual de familias y espesores disponibles. SIEMPRE usar esto en vez de recitar de memoria.
       responses:
         "200":
-          description: Catálogo de productos
+          description: Catálogo de productos con familias y espesores
           content:
             application/json:
               schema:
@@ -62,7 +63,8 @@ paths:
   /api/autoportancia:
     get:
       operationId: validarAutoportancia
-      summary: Valida la luz máxima para una familia y espesor
+      summary: Valida luz máxima o devuelve tabla completa de autoportancia. SIEMPRE usar esto para datos técnicos de luz.
+      description: Sin parámetros devuelve tabla completa. Con los 3 parámetros valida un caso específico.
       parameters:
         - name: familia
           in: query
@@ -81,7 +83,7 @@ paths:
           example: 4.5
       responses:
         "200":
-          description: Resultado de validación
+          description: Resultado de validación o tabla completa
           content:
             application/json:
               schema:
@@ -109,14 +111,14 @@ components:
         escenario:
           type: string
           enum: [solo_techo, solo_fachada, techo_fachada, camara_frigorifica]
-          description: Tipo de obra a cotizar
+          description: "solo_techo: cubierta. solo_fachada: paredes. techo_fachada: ambos (misma familia). camara_frigorifica: techo + 4 paredes (altura fija 3m)."
         familia:
           type: string
           enum: [ISODEC_EPS, ISODEC_PIR, ISOROOF_3G, ISOPANEL_EPS, ISOWALL_PIR]
-          description: Familia de panel
+          description: Familia de panel. Consultar GET /api/productos para ver espesores disponibles por familia.
         espesor_mm:
           type: number
-          description: Espesor del panel en mm
+          description: Espesor del panel en mm. Debe existir en la familia seleccionada.
         ancho_m:
           type: number
           description: Ancho del área en metros
@@ -127,20 +129,20 @@ components:
           type: string
           enum: [venta, web]
           default: venta
-          description: Lista de precios a aplicar
+          description: "venta: precio distribuidor. web: precio publicado en bmcuruguay.com.uy"
         apoyos:
           type: number
           default: 0
-          description: Cantidad de apoyos intermedios (solo techo)
+          description: "Apoyos intermedios (solo techo). Reduce luz efectiva: luz = largo / (apoyos + 1)"
         num_aberturas:
           type: number
           default: 0
-          description: Cantidad de aberturas (puertas/ventanas)
+          description: Cantidad de aberturas (puertas/ventanas, solo fachada)
         estructura:
           type: string
           enum: [metal, hormigon, mixto]
           default: metal
-          description: Tipo de estructura de la obra
+          description: Tipo de estructura. Afecta tornillería en fachada (5.5 T2/m² para metal/mixto).
 
     CotizarResponse:
       type: object
@@ -149,6 +151,7 @@ components:
           type: boolean
         cotizacion:
           type: object
+          description: Presentar TODOS estos campos al cliente sin omitir ni modificar valores.
           properties:
             cotizacion_id:
               type: string
@@ -160,12 +163,36 @@ components:
               type: string
             espesor_mm:
               type: number
+            lista_precios:
+              type: string
             secciones:
               type: array
+              description: "Cada sección tiene: tipo (techo|pared|pared_frontal_posterior|pared_lateral), items[], subtotal"
               items:
                 type: object
+                properties:
+                  tipo:
+                    type: string
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        descripcion:
+                          type: string
+                        cantidad:
+                          type: number
+                        unidad:
+                          type: string
+                        precio_unit:
+                          type: number
+                        subtotal:
+                          type: number
+                  subtotal:
+                    type: number
             resumen:
               type: object
+              description: Totales finales. Presentar SIEMPRE el desglose completo.
               properties:
                 subtotal_sin_iva:
                   type: number
@@ -177,10 +204,12 @@ components:
                   type: string
             warnings:
               type: array
+              description: Advertencias de autoportancia u otras. Mostrar al cliente SIEMPRE.
               items:
                 type: string
             envio_referencia_usd:
               type: number
+              description: Costo referencial de envío en USD
             nota:
               type: string
 
@@ -191,9 +220,10 @@ components:
       properties:
         cotizacion_data:
           type: object
-          description: Objeto cotización retornado por POST /api/cotizar
+          description: "El objeto completo 'cotizacion' retornado por POST /api/cotizar (con cotizacion_id, secciones, resumen, etc.)"
         cliente:
           type: object
+          description: Datos opcionales del cliente para incluir en el PDF
           properties:
             nombre:
               type: string
@@ -233,3 +263,4 @@ components:
           type: string
         tabla:
           type: object
+          description: Tabla completa de luces máximas por familia y espesor (cuando se consulta sin parámetros)
