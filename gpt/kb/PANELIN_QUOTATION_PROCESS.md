@@ -34,11 +34,11 @@ El GPT identifica en la conversación:
 
 ### Paso 2: Validación
 Antes de llamar la API, verificar que estén presentes:
-- escenario ✓
-- familia ✓
-- espesor_mm ✓
-- ancho_m ✓
-- largo_m ✓
+- escenario ✅
+- familia ✅
+- espesor_mm ✅
+- ancho_m ✅
+- largo_m ✅
 
 ### Paso 3: Llamada a la API
 ```
