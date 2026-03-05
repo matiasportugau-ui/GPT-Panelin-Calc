@@ -73,8 +73,8 @@ describe('POST /api/cotizar', () => {
     expect(skus).toContain('ISODEC_EPS_100');
     expect(skus).toContain('6838');  // gotero frontal
     expect(skus).toContain('6842');  // gotero lateral
-    expect(skus).toContain('TMOME');
-    expect(skus).toContain('ARATRAP');
+    expect(skus).toContain('VARILLA38');  // sist. varilla_tuerca (ISODEC_EPS)
+    expect(skus).toContain('ARCA38');
   });
 
   test('cotización techo ISOROOF 3G 50mm — items con SKUs reales', async () => {

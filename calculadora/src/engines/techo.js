@@ -1,6 +1,6 @@
 'use strict';
 
-const { getPanelInfo, getAccessoryInfo } = require('../data/catalog');
+const { getPanelDimensions, batchGetPrices, enrichRawItems } = require('../data/catalog');
 const { getConfig } = require('../data/config_loader');
 
 // Gotero SKU lookup tables by family and thickness
@@ -104,23 +104,7 @@ function resolverGoteroData(familia, espesor_mm) {
   return null; // ISOPANEL, ISOWALL, ISOFRIG: no defined gotero system
 }
 
-/**
- * Add an accessory item to the BOM list. Skips if sku is null, cantidad is not finite, or cantidad <= 0.
- * @returns {number} subtotal added
- */
-function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
-  if (!sku || !Number.isFinite(cantidad) || cantidad <= 0) return 0;
-  const acc = getAccessoryInfo(sku, lista_precios);
-  const precio_unit = acc.precio;
-  const subtotal = Math.round(cantidad * precio_unit * 100) / 100;
-  items.push({ sku, descripcion, cantidad, unidad, precio_unit, subtotal });
-  return subtotal;
-}
-
 // Fastening system by panel family
-// varilla_tuerca: structural bolt system (ISODEC heavy panels)
-// caballete_tornillo: saddle bracket + needle screw (ISOROOF light panels)
-// tmome: TMOME screw + ARATRAP washer (default / other families)
 const SIST_FIJACION_TECHO = {
   ISODEC_EPS:    'varilla_tuerca',
   ISODEC_PIR:    'varilla_tuerca',
@@ -133,32 +117,41 @@ const SIST_FIJACION_TECHO = {
 };
 
 /**
- * Calcula el BOM completo para un techo de paneles Panelin.
- *
- * @param {Object} params
- * @param {string} params.familia           - e.g. 'ISODEC_EPS', 'ISOROOF_3G'
- * @param {number} params.espesor_mm        - Espesor en mm
- * @param {number} [params.ancho_m]         - Ancho del techo en metros (alternativo a cant_paneles)
- * @param {number} [params.cant_paneles]    - Cantidad de paneles (alternativo a ancho_m)
- * @param {number} params.largo_m           - Largo del techo en metros
- * @param {number} [params.apoyos]          - Apoyos intermedios (default 0)
- * @param {'metal'|'hormigon'|'mixto'} [params.estructura]
- * @param {'venta'|'web'} [params.lista_precios]
- * @param {boolean} [params.tiene_cumbrera] - Incluir cumbrera (default false)
- * @param {boolean} [params.tiene_canalon]  - Incluir canalón (default false)
- * @param {'liso'|'greca'} [params.tipo_gotero_frontal] - Tipo gotero frontal para ISOROOF (default 'liso')
- * @returns {Object} BOM detallado con items y subtotal
+ * Push a raw (price-free) item to the collector array.
+ * Skips items with null/invalid sku or non-positive quantity.
+ * Phase 1 counterpart to the old addItem().
  */
-function calcTechoCompleto({
+function collectItem(rawItems, { sku, descripcion, cantidad, unidad }) {
+  if (!sku || !Number.isFinite(cantidad) || cantidad <= 0) return;
+  rawItems.push({ sku, descripcion, cantidad, unidad });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 1 — Pure quantity calculation. NO catalog price lookups.
+// Reads: PANEL_DEFS (au_m, via getPanelDimensions) + logic_config (formula params)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calculate all BOM quantities for a techo section WITHOUT resolving prices.
+ *
+ * Returns raw items where:
+ *   - Accessories: { sku, descripcion, cantidad, unidad }
+ *   - Panel:       { sku, descripcion, cantidad, unidad, _area, _auM, _largoM }
+ *     (_area/_auM/_largoM are used by enrichRawItems() for m²-based panel pricing)
+ *
+ * @param {Object} params  — same signature as calcTechoCompleto()
+ * @returns {{ tipo, familia, espesor_mm, ancho_m, largo_m, area_m2,
+ *             cant_paneles, sist_fijacion, rawItems: Object[] }}
+ */
+function calcCantidadesTecho({
   familia, espesor_mm, ancho_m, cant_paneles, largo_m,
-  apoyos = 0, estructura = 'metal', lista_precios = 'venta',
+  apoyos = 0, estructura = 'metal',
   tiene_cumbrera = false, tiene_canalon = false,
   tipo_gotero_frontal = 'liso',
 }) {
-  const panelInfo = getPanelInfo(familia, espesor_mm, lista_precios);
-  const { sku: panelSku, name: panelName, precio_m2, au_m } = panelInfo;
+  // getPanelDimensions reads only PANEL_DEFS — no CSV, no price
+  const { sku: panelSku, name: panelName, au_m } = getPanelDimensions(familia, espesor_mm);
 
-  // Resolve panel count and effective width
   let cantP, anchoEfectivo;
   if (cant_paneles != null) {
     cantP = Math.ceil(Number(cant_paneles));
@@ -170,166 +163,164 @@ function calcTechoCompleto({
 
   const areaRaw = cantP * au_m * largo_m;
   const area_m2 = Math.round(areaRaw * 100) / 100;
-  const costo_paneles = Math.round(areaRaw * precio_m2 * 100) / 100;
-  const precio_unit_panel = Math.round(precio_m2 * au_m * largo_m * 100) / 100;
 
-  const items = [];
-  let subtotal = costo_paneles;
+  const rawItems = [];
 
-  // 1. Panels
-  items.push({
-    sku: panelSku,
+  // 1. Panel — stored with _area/_auM/_largoM for area-based pricing in Phase 2
+  rawItems.push({
+    sku:         panelSku,
     descripcion: panelName || `Panel ${familia} ${espesor_mm}mm`,
-    cantidad: cantP,
-    unidad: 'panel',
-    precio_unit: precio_unit_panel,
-    subtotal: costo_paneles,
+    cantidad:    cantP,
+    unidad:      'panel',
+    _area:       areaRaw,   // subtotal = _area × precio_m2
+    _auM:        au_m,      // precio_unit = precio_m2 × _auM × _largoM
+    _largoM:     largo_m,
   });
 
+  // 2–7. Gotero system (only for families that have one)
   const gotero = resolverGoteroData(familia, espesor_mm);
 
   if (gotero) {
-    // 2. Gotero frontal (borde inferior — donde cae el agua)
-    // Para ISOROOF: puede ser liso o greca según tipo_gotero_frontal
     let frontalSku = gotero.frontal_sku;
     if (tipo_gotero_frontal === 'greca' &&
         (familia === 'ISOROOF_3G' || familia === 'ISOROOF_FOIL' || familia === 'ISOROOF_PLUS')) {
-      frontalSku = 'GFCGR30'; // gotero frontal greca universal para ISOROOF
+      frontalSku = 'GFCGR30';
     }
-    const cantFrontal = Math.ceil(anchoEfectivo / gotero.frontal_length);
-    subtotal += addItem(items, {
-      sku: frontalSku,
+    collectItem(rawItems, {
+      sku:         frontalSku,
       descripcion: `Gotero Frontal ${tipo_gotero_frontal === 'greca' ? 'Greca' : ''} (${familia} ${espesor_mm}mm)`.trim(),
-      cantidad: cantFrontal,
-      unidad: 'pieza',
-      lista_precios,
+      cantidad:    Math.ceil(anchoEfectivo / gotero.frontal_length),
+      unidad:      'pieza',
     });
 
-    // 3. Gotero superior (borde contra muro/cumbrera)
-    const cantSuperior = Math.ceil(anchoEfectivo / gotero.superior_length);
-    subtotal += addItem(items, {
-      sku: gotero.superior_sku,
+    collectItem(rawItems, {
+      sku:         gotero.superior_sku,
       descripcion: `Gotero Superior / Babeta (${familia} ${espesor_mm}mm)`,
-      cantidad: cantSuperior,
-      unidad: 'pieza',
-      lista_precios,
+      cantidad:    Math.ceil(anchoEfectivo / gotero.superior_length),
+      unidad:      'pieza',
     });
 
-    // 4. Goteros laterales (izquierdo + derecho)
-    const cantLateral = Math.ceil(largo_m / gotero.lateral_length) * 2;
-    subtotal += addItem(items, {
-      sku: gotero.lateral_sku,
+    collectItem(rawItems, {
+      sku:         gotero.lateral_sku,
       descripcion: `Gotero Lateral × 2 (${familia} ${espesor_mm}mm)`,
-      cantidad: cantLateral,
-      unidad: 'pieza',
-      lista_precios,
+      cantidad:    Math.ceil(largo_m / gotero.lateral_length) * 2,
+      unidad:      'pieza',
     });
 
-    // 5. Cumbrera (optional, 2 aguas)
     if (tiene_cumbrera) {
-      const cantCumbrera = Math.ceil(anchoEfectivo / 3.0);
-      subtotal += addItem(items, {
-        sku: gotero.cumbrera_sku,
+      collectItem(rawItems, {
+        sku:         gotero.cumbrera_sku,
         descripcion: `Cumbrera (${familia})`,
-        cantidad: cantCumbrera,
-        unidad: 'pieza',
-        lista_precios,
+        cantidad:    Math.ceil(anchoEfectivo / 3.0),
+        unidad:      'pieza',
       });
     }
 
-    // 6. Canalón (optional)
     if (tiene_canalon && gotero.canalon_sku) {
-      const cantCanalon = Math.ceil(anchoEfectivo / gotero.canalon_length);
-      subtotal += addItem(items, {
-        sku: gotero.canalon_sku,
+      collectItem(rawItems, {
+        sku:         gotero.canalon_sku,
         descripcion: `Canalón (${familia} ${espesor_mm}mm)`,
-        cantidad: cantCanalon,
-        unidad: 'pieza',
-        lista_precios,
+        cantidad:    Math.ceil(anchoEfectivo / gotero.canalon_length),
+        unidad:      'pieza',
       });
-
-      // 7. Soporte canalón (1 each 1.5m of canalón width)
-      const cantSoporte = Math.ceil(anchoEfectivo / 1.5);
-      subtotal += addItem(items, {
-        sku: gotero.soporte_canalon_sku,
+      collectItem(rawItems, {
+        sku:         gotero.soporte_canalon_sku,
         descripcion: 'Soporte Canalón',
-        cantidad: cantSoporte,
-        unidad: 'pieza',
-        lista_precios,
+        cantidad:    Math.ceil(anchoEfectivo / 1.5),
+        unidad:      'pieza',
       });
     }
   }
 
-  // ── Fijaciones según sistema de fijación de la familia ──────────────────
+  // 8–12. Fijaciones — one of three exclusive branches
   const sist = SIST_FIJACION_TECHO[familia] || 'tmome';
-
-  const fp = getConfig().formula_params.techo;
+  const fp   = getConfig().formula_params.techo;
 
   if (sist === 'varilla_tuerca') {
-    // ptos = (paneles × apoyos × laterales) + (largo × 2 / intervalo_largo)
     const apoyosReales = apoyos > 0 ? apoyos : fp.varilla_tuerca.apoyos_minimos_default;
-    const ptosFij = Math.ceil((cantP * apoyosReales * fp.varilla_tuerca.laterales_por_punto) + (largo_m * 2 / fp.varilla_tuerca.intervalo_largo_m));
+    const ptosFij      = Math.ceil(
+      (cantP * apoyosReales * fp.varilla_tuerca.laterales_por_punto) +
+      (largo_m * 2 / fp.varilla_tuerca.intervalo_largo_m)
+    );
     const cantVarillas = Math.ceil(ptosFij * fp.varilla_tuerca.varillas_por_punto);
-    const cantTuercas  = cantVarillas * 2;
-    const cantArcCarr  = cantVarillas * 2;
-    const cantArPP     = cantVarillas * 2;
 
-    subtotal += addItem(items, { sku: 'VARILLA38',  descripcion: 'Varilla roscada 3/8"',          cantidad: cantVarillas, unidad: 'unid', lista_precios });
-    subtotal += addItem(items, { sku: 'TUERCA38',   descripcion: 'Tuerca 3/8" galv.',              cantidad: cantTuercas,  unidad: 'unid', lista_precios });
-    subtotal += addItem(items, { sku: 'ARCA38',     descripcion: 'Arandela carrocero 3/8"',        cantidad: cantArcCarr,  unidad: 'unid', lista_precios });
-    subtotal += addItem(items, { sku: 'ARAPP',      descripcion: 'Tortuga PVC (arandela PP)',       cantidad: cantArPP,     unidad: 'unid', lista_precios });
+    collectItem(rawItems, { sku: 'VARILLA38', descripcion: 'Varilla roscada 3/8"',       cantidad: cantVarillas,     unidad: 'unid' });
+    collectItem(rawItems, { sku: 'TUERCA38',  descripcion: 'Tuerca 3/8" galv.',           cantidad: cantVarillas * 2, unidad: 'unid' });
+    collectItem(rawItems, { sku: 'ARCA38',    descripcion: 'Arandela carrocero 3/8"',     cantidad: cantVarillas * 2, unidad: 'unid' });
+    collectItem(rawItems, { sku: 'ARAPP',     descripcion: 'Tortuga PVC (arandela PP)',   cantidad: cantVarillas * 2, unidad: 'unid' });
     if (estructura === 'hormigon') {
-      subtotal += addItem(items, { sku: 'TACEXP38', descripcion: 'Taco expansivo 3/8"',             cantidad: ptosFij,      unidad: 'unid', lista_precios });
+      collectItem(rawItems, { sku: 'TACEXP38', descripcion: 'Taco expansivo 3/8"', cantidad: ptosFij, unidad: 'unid' });
     }
 
   } else if (sist === 'caballete_tornillo') {
-    // caballetes = ceil(paneles × tramos × (largo/paso + 1) + (largo × 2 / intervalo_perim))
     const cantCaballetes = Math.ceil(
       (cantP * fp.caballete.tramos_por_panel * (largo_m / fp.caballete.paso_apoyo_m + 1)) +
       (largo_m * 2 / fp.caballete.intervalo_perimetro_m)
     );
     const cajasAgujas = Math.ceil(cantCaballetes * 2 / 100);
 
-    subtotal += addItem(items, { sku: 'CABALLETE',  descripcion: 'Caballete (arandela trapezoidal)', cantidad: cantCaballetes, unidad: 'unid', lista_precios });
-    subtotal += addItem(items, { sku: 'TORN_AGUJA', descripcion: 'Tornillo aguja 5" (caja ×100)',    cantidad: cajasAgujas,    unidad: 'caja', lista_precios });
+    collectItem(rawItems, { sku: 'CABALLETE',  descripcion: 'Caballete (arandela trapezoidal)', cantidad: cantCaballetes, unidad: 'unid' });
+    collectItem(rawItems, { sku: 'TORN_AGUJA', descripcion: 'Tornillo aguja 5" (caja ×100)',    cantidad: cajasAgujas,    unidad: 'caja' });
 
   } else {
+    // tmome (default)
     const cantTornillos = Math.ceil(areaRaw * fp.tornillos_por_m2_tmome);
-    subtotal += addItem(items, { sku: 'TMOME',   descripcion: 'Tornillo TMOME (madera/metal)',    cantidad: cantTornillos, unidad: 'und', lista_precios });
-    subtotal += addItem(items, { sku: 'ARATRAP', descripcion: 'Arandela Trapezoidal ARATRAP',     cantidad: cantTornillos, unidad: 'und', lista_precios });
+    collectItem(rawItems, { sku: 'TMOME',   descripcion: 'Tornillo TMOME (madera/metal)',  cantidad: cantTornillos, unidad: 'und' });
+    collectItem(rawItems, { sku: 'ARATRAP', descripcion: 'Arandela Trapezoidal ARATRAP',   cantidad: cantTornillos, unidad: 'und' });
   }
 
-  // ── Selladores ───────────────────────────────────────────────────────────
-  const cantButilo = Math.max(1, Math.ceil((cantP - 1) * largo_m / fp.butilo_ml_por_rollo_m));
-  subtotal += addItem(items, {
-    sku: 'C.But.',
+  // 13–14. Selladores — always present
+  collectItem(rawItems, {
+    sku:         'C.But.',
     descripcion: `Cinta Butilo C.But. (${fp.butilo_ml_por_rollo_m}m)`,
-    cantidad: cantButilo,
-    unidad: 'rollo',
-    lista_precios,
+    cantidad:    Math.max(1, Math.ceil((cantP - 1) * largo_m / fp.butilo_ml_por_rollo_m)),
+    unidad:      'rollo',
   });
-
-  const cantSilicona = Math.ceil(cantP * fp.silicona_cartuchos_por_panel);
-  subtotal += addItem(items, {
-    sku: 'Bromplast',
+  collectItem(rawItems, {
+    sku:         'Bromplast',
     descripcion: 'Silicona Bromplast (600ml)',
-    cantidad: cantSilicona,
-    unidad: 'cartucho',
-    lista_precios,
+    cantidad:    Math.ceil(cantP * fp.silicona_cartuchos_por_panel),
+    unidad:      'cartucho',
   });
 
   return {
-    tipo: 'techo',
+    tipo:          'techo',
     familia,
     espesor_mm,
-    ancho_m: anchoEfectivo,
+    ancho_m:       anchoEfectivo,
     largo_m,
     area_m2,
-    cant_paneles: cantP,
+    cant_paneles:  cantP,
     sist_fijacion: sist,
-    items,
-    subtotal: Math.round(subtotal * 100) / 100,
+    rawItems,
   };
 }
 
-module.exports = { calcTechoCompleto };
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 2 wrapper — backward-compatible public API.
+// Internally calls calcCantidadesTecho + batchGetPrices + enrichRawItems.
+// External callers (tests, API) continue to use this function unchanged.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calcula el BOM completo para un techo de paneles Panelin.
+ * Retains the original public interface. Internally uses two-phase calculation.
+ *
+ * @param {Object} params  — same params as before
+ * @returns {Object} BOM detallado con items y subtotal
+ */
+function calcTechoCompleto(params) {
+  const { lista_precios = 'venta' } = params;
+
+  // Phase 1: pure quantities (no catalog price access)
+  const raw = calcCantidadesTecho(params);
+
+  // Phase 2: resolve all prices in one batch, then enrich
+  const priceMap = batchGetPrices(raw.rawItems.map(i => i.sku), lista_precios);
+  const { items, subtotal } = enrichRawItems(raw.rawItems, priceMap);
+
+  const { rawItems: _, ...meta } = raw;
+  return { ...meta, items, subtotal };
+}
+
+module.exports = { calcTechoCompleto, calcCantidadesTecho };

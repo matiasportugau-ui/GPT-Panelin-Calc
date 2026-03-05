@@ -125,6 +125,18 @@ const PANEL_DEFS = {
   },
 };
 
+// Reverse lookup: panel SKU → { venta, web } for families whose prices are
+// hardcoded inside PANEL_DEFS (currently only ISODEC_EPS, not in CSV).
+// Built once at module load. Used by batchGetPrices() as a fallback.
+const hardcodedPanelPrices = new Map();
+for (const thicknesses of Object.values(PANEL_DEFS)) {
+  for (const def of Object.values(thicknesses)) {
+    if (def.venta !== undefined) {
+      hardcodedPanelPrices.set(def.sku, { venta: def.venta, web: def.web ?? def.venta });
+    }
+  }
+}
+
 /**
  * Get panel info by internal family name and thickness.
  * @param {string} familia - e.g. 'ISODEC_EPS', 'ISOROOF_3G'
@@ -209,6 +221,100 @@ function getAccessoryInfo(sku, lista_precios = 'venta') {
 }
 
 /**
+ * Get panel dimensional data WITHOUT accessing the CSV or price columns.
+ * Reads only PANEL_DEFS (hardcoded constants). Safe to call in Phase 1 (quantity-only).
+ * @param {string} familia
+ * @param {number} espesor_mm
+ * @returns {{ sku: string, name: string, au_m: number }}
+ */
+function getPanelDimensions(familia, espesor_mm) {
+  const familyDef = PANEL_DEFS[familia];
+  if (!familyDef) {
+    throw new Error(`Familia no encontrada: ${familia}. Disponibles: ${Object.keys(PANEL_DEFS).join(', ')}`);
+  }
+  const def = familyDef[Number(espesor_mm)];
+  if (!def) {
+    throw new Error(`Espesor ${espesor_mm}mm no disponible para ${familia}`);
+  }
+  return { sku: def.sku, name: def.name || `${familia} ${espesor_mm}mm`, au_m: def.au_m };
+}
+
+/**
+ * Resolve prices for multiple SKUs in a single deduplicating pass.
+ * Much more efficient than calling getAccessoryInfo() per item when processing
+ * multiple sections (techo + pared share SKUs like TMOME, ARATRAP, C.But., Bromplast).
+ *
+ * @param {string[]} skus  - Array of SKUs (duplicates are deduplicated automatically)
+ * @param {'venta'|'web'} lista_precios
+ * @returns {Map<string, number>}  sku → precio
+ */
+function batchGetPrices(skus, lista_precios = 'venta') {
+  const priceMap = new Map();
+  for (const sku of new Set(skus)) {
+    const row = skuMap.get(sku);
+    if (row) {
+      const precio = lista_precios === 'web' ? row.web : row.venta;
+      if (precio === null || precio === undefined) {
+        throw new Error(`Precio no disponible para SKU ${sku}`);
+      }
+      priceMap.set(sku, precio);
+      continue;
+    }
+    const hard = getHardcodedAccessory(sku);
+    if (hard) {
+      const precio = lista_precios === 'web' ? hard.web : hard.venta;
+      priceMap.set(sku, precio);
+      continue;
+    }
+    // Last resort: panel SKU with hardcoded price in PANEL_DEFS (e.g. ISODEC_EPS)
+    const panelEntry = hardcodedPanelPrices.get(sku);
+    if (panelEntry) {
+      priceMap.set(sku, lista_precios === 'web' ? panelEntry.web : panelEntry.venta);
+      continue;
+    }
+    throw new Error(`Accesorio no encontrado: ${sku}`);
+  }
+  return priceMap;
+}
+
+/**
+ * Enrich raw BOM items (Phase 1 output) with prices from a pre-resolved price map.
+ *
+ * Raw items for accessories carry: { sku, descripcion, cantidad, unidad }
+ * Raw items for panels carry additionally: { _area, _auM, _largoM }
+ *   where _area is the m² to multiply by precio_m2, and _auM/_largoM allow
+ *   computing the per-panel display price.
+ *
+ * @param {Object[]} rawItems  - Phase 1 items (may contain _area/_auM/_largoM)
+ * @param {Map<string,number>} priceMap  - From batchGetPrices()
+ * @returns {{ items: Object[], subtotal: number }}
+ */
+function enrichRawItems(rawItems, priceMap) {
+  const items = [];
+  let subtotal = 0;
+  for (const item of rawItems) {
+    const { _area, _auM, _largoM, ...clean } = item;
+    const precioBase = priceMap.get(item.sku);
+    if (precioBase === undefined) {
+      throw new Error(`SKU sin precio en priceMap: ${item.sku}`);
+    }
+    let precio_unit, sub;
+    if (_area !== undefined) {
+      // Panel: unit = precio_m2; subtotal = area × precio_m2; display price = precio per panel
+      sub        = Math.round(_area * precioBase * 100) / 100;
+      precio_unit = Math.round(precioBase * _auM * _largoM * 100) / 100;
+    } else {
+      // Accessory: straightforward unit pricing
+      precio_unit = precioBase;
+      sub         = Math.round(item.cantidad * precioBase * 100) / 100;
+    }
+    items.push({ ...clean, precio_unit, subtotal: sub });
+    subtotal += sub;
+  }
+  return { items, subtotal: Math.round(subtotal * 100) / 100 };
+}
+
+/**
  * List all available panel families with thicknesses.
  * @returns {Array<{ familia: string, espesores: number[] }>}
  */
@@ -224,4 +330,12 @@ function ivaRate() {
   return getConfig().iva_rate || IVA_RATE;
 }
 
-module.exports = { getPanelInfo, getAccessoryInfo, listFamilies, ivaRate };
+module.exports = {
+  getPanelInfo,
+  getPanelDimensions,
+  getAccessoryInfo,
+  batchGetPrices,
+  enrichRawItems,
+  listFamilies,
+  ivaRate,
+};

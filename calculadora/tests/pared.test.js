@@ -67,8 +67,8 @@ describe('calcParedCompleto — ISOPANEL EPS 100mm 3×10m (estructura metal)', (
     expect(item).toBeDefined();
   });
 
-  test('NO incluye perfiles inventados (K2, G2)', () => {
-    expect(result.items.find(i => i.descripcion && i.descripcion.includes('K2'))).toBeUndefined();
+  test('incluye K2 por defecto (incl_k2=true, cantP=3>1); NO incluye G2 (no solicitado)', () => {
+    expect(result.items.find(i => i.sku === 'K2')).toBeDefined();
     expect(result.items.find(i => i.descripcion && i.descripcion.includes('G2'))).toBeUndefined();
   });
 });

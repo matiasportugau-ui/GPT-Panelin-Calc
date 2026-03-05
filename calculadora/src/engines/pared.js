@@ -1,6 +1,6 @@
 'use strict';
 
-const { getPanelInfo, getAccessoryInfo } = require('../data/catalog');
+const { getPanelDimensions, batchGetPrices, enrichRawItems } = require('../data/catalog');
 const { getConfig } = require('../data/config_loader');
 
 // Perfil U SKU by panel thickness (solera superior + inferior), pieza = 3m
@@ -26,48 +26,36 @@ const PERFIL_G2_SKU = {
 const PERFIL_U_LENGTH = 3.0; // piezas de 3m
 
 /**
- * Add an accessory item to the BOM list.
- * @returns {number} subtotal added
+ * Push a raw (price-free) item to the collector array.
+ * Skips items with null/invalid sku or non-positive quantity.
  */
-function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
-  if (!sku || !Number.isFinite(cantidad) || cantidad <= 0) return 0;
-  const acc = getAccessoryInfo(sku, lista_precios);
-  const precio_unit = acc.precio;
-  const subtotal = Math.round(cantidad * precio_unit * 100) / 100;
-  items.push({ sku, descripcion, cantidad, unidad, precio_unit, subtotal });
-  return subtotal;
+function collectItem(rawItems, { sku, descripcion, cantidad, unidad }) {
+  if (!sku || !Number.isFinite(cantidad) || cantidad <= 0) return;
+  rawItems.push({ sku, descripcion, cantidad, unidad });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 1 — Pure quantity calculation. NO catalog price lookups.
+// ─────────────────────────────────────────────────────────────────────────────
+
 /**
- * Calcula el BOM completo para una pared/fachada de paneles Panelin.
+ * Calculate all BOM quantities for a pared section WITHOUT resolving prices.
  *
- * @param {Object} params
- * @param {string} params.familia           - e.g. 'ISOPANEL_EPS', 'ISOWALL_PIR'
- * @param {number} params.espesor_mm
- * @param {number} [params.ancho_m]         - Ancho total de la pared en metros (alternativo a cant_paneles)
- * @param {number} [params.cant_paneles]    - Cantidad de paneles (alternativo a ancho_m)
- * @param {number} params.largo_m           - Altura de la pared en metros
- * @param {Array}  [params.aberturas]       - [{ancho, alto, cant}] — descuenta área real del coste de paneles
- * @param {number} [params.num_aberturas]   - Compat. legacy: cantidad de aberturas (sin descuento de área)
- * @param {number} [params.num_esq_ext]     - Esquineros exteriores (default 0)
- * @param {number} [params.num_esq_int]     - Esquineros interiores (default 0)
- * @param {boolean} [params.incl_k2]        - Incluir perfil K2 entre paneles (default true)
- * @param {boolean} [params.incl_5852]      - Incluir ángulo aluminio 5852 (default false)
- * @param {'metal'|'hormigon'|'mixto'} [params.estructura]
- * @param {'venta'|'web'} [params.lista_precios]
- * @returns {Object} BOM detallado con items y subtotal
+ * @param {Object} params  — same signature as calcParedCompleto()
+ * @returns {{ tipo, familia, espesor_mm, ancho_m, largo_m,
+ *             area_bruta_m2, area_aberturas_m2, area_neta_m2,
+ *             cant_paneles, rawItems: Object[] }}
  */
-function calcParedCompleto({
+function calcCantidadesPared({
   familia, espesor_mm, ancho_m, cant_paneles, largo_m,
   aberturas = [], num_aberturas = 0,
   num_esq_ext = 0, num_esq_int = 0,
   incl_k2 = true, incl_5852 = false,
-  estructura = 'metal', lista_precios = 'venta',
+  estructura = 'metal',
 }) {
-  const panelInfo = getPanelInfo(familia, espesor_mm, lista_precios);
-  const { sku: panelSku, name: panelName, precio_m2, au_m } = panelInfo;
+  // getPanelDimensions reads only PANEL_DEFS — no CSV, no price
+  const { sku: panelSku, name: panelName, au_m } = getPanelDimensions(familia, espesor_mm);
 
-  // Resolve panel count and effective width
   let cantP, anchoEfectivo;
   if (cant_paneles != null) {
     cantP = Math.ceil(Number(cant_paneles));
@@ -77,185 +65,174 @@ function calcParedCompleto({
     anchoEfectivo = cantP * au_m;
   }
 
-  // ── Área de paneles ──────────────────────────────────────────────────────
+  // Area calculation
   const areaBruta = Math.round(cantP * au_m * largo_m * 100) / 100;
 
-  // Descuento de aberturas con dimensiones reales
   let areaAberturas = 0;
   if (Array.isArray(aberturas) && aberturas.length > 0) {
     for (const ab of aberturas) {
       const ancho = Number(ab.ancho || 0);
-      const alto = Number(ab.alto || 0);
-      const cant = Number(ab.cant || 1);
+      const alto  = Number(ab.alto  || 0);
+      const cant  = Number(ab.cant  || 1);
       if (ancho > 0 && alto > 0) areaAberturas += ancho * alto * cant;
     }
   }
   areaAberturas = Math.round(areaAberturas * 100) / 100;
   const areaNeta = Math.round(Math.max(areaBruta - areaAberturas, 0) * 100) / 100;
 
-  const costo_paneles = Math.round(areaNeta * precio_m2 * 100) / 100;
-  const precio_unit_panel = Math.round(precio_m2 * au_m * largo_m * 100) / 100;
-
-  const items = [];
-  let subtotal = costo_paneles;
-
-  // 1. Paneles
-  items.push({
-    sku: panelSku,
-    descripcion: panelName || `Panel ${familia} ${espesor_mm}mm`,
-    cantidad: cantP,
-    unidad: 'panel',
-    precio_unit: precio_unit_panel,
-    subtotal: costo_paneles,
-    area_bruta_m2: areaBruta,
-    area_aberturas_m2: areaAberturas,
-    area_neta_m2: areaNeta,
-  });
-
   const fp = getConfig().formula_params.pared;
+  const rawItems = [];
+
+  // 1. Panel — stored with _area/_auM/_largoM for area-based pricing in Phase 2
+  //    In pared: _area = areaNeta (net area after deductions), NOT areaBruta.
+  rawItems.push({
+    sku:         panelSku,
+    descripcion: panelName || `Panel ${familia} ${espesor_mm}mm`,
+    cantidad:    cantP,
+    unidad:      'panel',
+    _area:       areaNeta,   // subtotal = areaNeta × precio_m2
+    _auM:        au_m,
+    _largoM:     largo_m,
+    // Extra pared-specific fields (preserved through enrichRawItems spread)
+    area_bruta_m2:     areaBruta,
+    area_aberturas_m2: areaAberturas,
+    area_neta_m2:      areaNeta,
+  });
 
   // 2. Perfil U — solera superior + inferior (2 × anchoEfectivo, piezas de 3m)
   const puSku = PERFIL_U_SKU[Number(espesor_mm)];
   if (puSku) {
-    const mlPerfilU = 2 * anchoEfectivo;
-    const cantPU = Math.ceil(mlPerfilU / fp.perfil_u_largo_pieza_m);
-    subtotal += addItem(items, {
-      sku: puSku,
+    collectItem(rawItems, {
+      sku:         puSku,
       descripcion: `Perfil U ${espesor_mm}mm (soleras sup+inf)`,
-      cantidad: cantPU,
-      unidad: 'pieza',
-      lista_precios,
+      cantidad:    Math.ceil(2 * anchoEfectivo / fp.perfil_u_largo_pieza_m),
+      unidad:      'pieza',
     });
   }
 
   // 3. Perfil K2 — juntas verticales entre paneles (cantP-1 juntas × altura)
   if (incl_k2 && cantP > 1) {
-    const juntasK2 = (cantP - 1) * Math.ceil(largo_m / fp.k2_largo_pieza_m);
-    subtotal += addItem(items, {
-      sku: 'K2',
+    collectItem(rawItems, {
+      sku:         'K2',
       descripcion: `Perfil K2 junta interior (${cantP - 1} juntas)`,
-      cantidad: juntasK2,
-      unidad: 'pieza',
-      lista_precios,
+      cantidad:    (cantP - 1) * Math.ceil(largo_m / fp.k2_largo_pieza_m),
+      unidad:      'pieza',
     });
   }
 
   // 4. Esquineros exteriores
   if (num_esq_ext > 0) {
-    const cantEsqExt = num_esq_ext * Math.ceil(largo_m / fp.esq_largo_pieza_m);
-    subtotal += addItem(items, {
-      sku: 'ESQ-EXT',
+    collectItem(rawItems, {
+      sku:         'ESQ-EXT',
       descripcion: `Esquinero exterior (${num_esq_ext} esq.)`,
-      cantidad: cantEsqExt,
-      unidad: 'pieza',
-      lista_precios,
+      cantidad:    num_esq_ext * Math.ceil(largo_m / fp.esq_largo_pieza_m),
+      unidad:      'pieza',
     });
   }
 
   // 5. Esquineros interiores
   if (num_esq_int > 0) {
-    const cantEsqInt = num_esq_int * Math.ceil(largo_m / fp.esq_largo_pieza_m);
-    subtotal += addItem(items, {
-      sku: 'ESQ-INT',
+    collectItem(rawItems, {
+      sku:         'ESQ-INT',
       descripcion: `Esquinero interior (${num_esq_int} esq.)`,
-      cantidad: cantEsqInt,
-      unidad: 'pieza',
-      lista_precios,
+      cantidad:    num_esq_int * Math.ceil(largo_m / fp.esq_largo_pieza_m),
+      unidad:      'pieza',
     });
   }
 
   // 6. Ángulo aluminio 5852 (opcional)
   if (incl_5852) {
-    const cant5852 = Math.ceil(anchoEfectivo / fp.angulo_5852_largo_pieza_m);
-    subtotal += addItem(items, {
-      sku: 'PLECHU98',
+    collectItem(rawItems, {
+      sku:         'PLECHU98',
       descripcion: 'Ángulo aluminio 5852 (6.8m)',
-      cantidad: cant5852,
-      unidad: 'pieza',
-      lista_precios,
+      cantidad:    Math.ceil(anchoEfectivo / fp.angulo_5852_largo_pieza_m),
+      unidad:      'pieza',
     });
   }
 
-  // ── Fijaciones ───────────────────────────────────────────────────────────
-  // Tornillos T2 + anclaje H° para todas las estructuras (pared siempre requiere anclaje)
+  // 7–8. Tornillos + arandelas (solo para estructuras metálicas)
   if (estructura === 'metal' || estructura === 'mixto') {
     const cantTornillos = Math.ceil(areaNeta * fp.tornillos_por_m2_tmome);
-    subtotal += addItem(items, {
-      sku: 'TMOME',
-      descripcion: 'Tornillo TMOME (madera/metal)',
-      cantidad: cantTornillos,
-      unidad: 'und',
-      lista_precios,
-    });
-
-    subtotal += addItem(items, {
-      sku: 'ARATRAP',
-      descripcion: 'Arandela Trapezoidal ARATRAP',
-      cantidad: cantTornillos,
-      unidad: 'und',
-      lista_precios,
-    });
+    collectItem(rawItems, { sku: 'TMOME',   descripcion: 'Tornillo TMOME (madera/metal)',  cantidad: cantTornillos, unidad: 'und' });
+    collectItem(rawItems, { sku: 'ARATRAP', descripcion: 'Arandela Trapezoidal ARATRAP',   cantidad: cantTornillos, unidad: 'und' });
   }
 
-  const cantAnclajes = Math.ceil(anchoEfectivo / fp.anclaje_intervalo_m);
-  subtotal += addItem(items, {
-    sku: 'ANCLAJE_H',
+  // 9. Anclaje H° — siempre presente (1 cada 30cm del ancho efectivo)
+  collectItem(rawItems, {
+    sku:         'ANCLAJE_H',
     descripcion: 'Kit anclaje H° (1 c/30cm)',
-    cantidad: cantAnclajes,
-    unidad: 'unid',
-    lista_precios,
+    cantidad:    Math.ceil(anchoEfectivo / fp.anclaje_intervalo_m),
+    unidad:      'unid',
   });
 
-  const cantRemaches = cantP * fp.remaches_por_panel;
-  const cantCajasRPOP = Math.max(1, Math.ceil(cantRemaches / fp.remaches_por_caja));
-  subtotal += addItem(items, {
-    sku: 'RPOP',
-    descripcion: `Remaches POP RPOP (caja 1000u) — ${cantRemaches} remaches`,
-    cantidad: cantCajasRPOP,
-    unidad: 'caja',
-    lista_precios,
+  // 10. Remaches POP — siempre presente
+  collectItem(rawItems, {
+    sku:         'RPOP',
+    descripcion: `Remaches POP RPOP (caja 1000u) — ${cantP * fp.remaches_por_panel} remaches`,
+    cantidad:    Math.max(1, Math.ceil(cantP * fp.remaches_por_panel / fp.remaches_por_caja)),
+    unidad:      'caja',
   });
 
-  // ── Selladores ───────────────────────────────────────────────────────────
-  const cantButilo = Math.max(1, Math.ceil((cantP - 1) * largo_m / fp.butilo_ml_por_rollo_m));
-  subtotal += addItem(items, {
-    sku: 'C.But.',
+  // 11. Cinta Butilo — siempre presente
+  collectItem(rawItems, {
+    sku:         'C.But.',
     descripcion: 'Cinta Butilo C.But. (22.5m)',
-    cantidad: cantButilo,
-    unidad: 'rollo',
-    lista_precios,
+    cantidad:    Math.max(1, Math.ceil((cantP - 1) * largo_m / fp.butilo_ml_por_rollo_m)),
+    unidad:      'rollo',
   });
 
-  // Silicona por ML de juntas (más preciso que por m²)
-  // Juntas verticales = (cantP-1) × alto
-  // Perímetro superior + inferior = anchoEfectivo × 2
-  const mlJuntas = Math.round(((cantP - 1) * largo_m + anchoEfectivo * 2) * 100) / 100;
-  const cantSilicona = Math.ceil(mlJuntas / fp.silicona_ml_por_cartucho);
-  subtotal += addItem(items, {
-    sku: 'Bromplast',
+  // 12. Silicona — por ML de juntas (más preciso que por m²)
+  const mlJuntas    = Math.round(((cantP - 1) * largo_m + anchoEfectivo * 2) * 100) / 100;
+  collectItem(rawItems, {
+    sku:         'Bromplast',
     descripcion: `Silicona Bromplast (600ml) — ${mlJuntas}ml de juntas`,
-    cantidad: cantSilicona,
-    unidad: 'cartucho',
-    lista_precios,
+    cantidad:    Math.ceil(mlJuntas / fp.silicona_ml_por_cartucho),
+    unidad:      'cartucho',
   });
 
   return {
-    tipo: 'pared',
+    tipo:               'pared',
     familia,
     espesor_mm,
-    ancho_m: anchoEfectivo,
+    ancho_m:            anchoEfectivo,
     largo_m,
-    area_bruta_m2: areaBruta,
-    area_aberturas_m2: areaAberturas,
-    area_neta_m2: areaNeta,
-    cant_paneles: cantP,
-    aberturas: aberturas.length > 0 ? aberturas : (num_aberturas > 0 ? [{ cant: num_aberturas, nota: 'legacy_count' }] : []),
+    area_bruta_m2:      areaBruta,
+    area_aberturas_m2:  areaAberturas,
+    area_neta_m2:       areaNeta,
+    cant_paneles:       cantP,
+    aberturas: aberturas.length > 0
+      ? aberturas
+      : (num_aberturas > 0 ? [{ cant: num_aberturas, nota: 'legacy_count' }] : []),
     num_esq_ext,
     num_esq_int,
     estructura,
-    items,
-    subtotal: Math.round(subtotal * 100) / 100,
+    rawItems,
   };
 }
 
-module.exports = { calcParedCompleto };
+// ─────────────────────────────────────────────────────────────────────────────
+// PHASE 2 wrapper — backward-compatible public API.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Calcula el BOM completo para una pared/fachada de paneles Panelin.
+ * Retains the original public interface. Internally uses two-phase calculation.
+ *
+ * @param {Object} params  — same params as before
+ * @returns {Object} BOM detallado con items y subtotal
+ */
+function calcParedCompleto(params) {
+  const { lista_precios = 'venta' } = params;
+
+  // Phase 1: pure quantities (no catalog price access)
+  const raw = calcCantidadesPared(params);
+
+  // Phase 2: resolve all prices in one batch, then enrich
+  const priceMap = batchGetPrices(raw.rawItems.map(i => i.sku), lista_precios);
+  const { items, subtotal } = enrichRawItems(raw.rawItems, priceMap);
+
+  const { rawItems: _, ...meta } = raw;
+  return { ...meta, items, subtotal };
+}
+
+module.exports = { calcParedCompleto, calcCantidadesPared };

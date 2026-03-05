@@ -1,10 +1,10 @@
 'use strict';
 
 const { v4: uuidv4 } = require('uuid');
-const { calcTechoCompleto } = require('./techo');
-const { calcParedCompleto } = require('./pared');
+const { calcCantidadesTecho } = require('./techo');
+const { calcCantidadesPared } = require('./pared');
 const { validarAutoportancia } = require('./autoportancia');
-const { ivaRate } = require('../data/catalog');
+const { batchGetPrices, enrichRawItems, ivaRate } = require('../data/catalog');
 const { getConfig } = require('../data/config_loader');
 
 const ESCENARIOS_VALIDOS = ['solo_techo', 'solo_fachada', 'techo_fachada', 'camara_frigorifica'];
@@ -125,7 +125,7 @@ function generarCotizacion(params) {
 
   const techoParams = {
     familia, espesor_mm, ancho_m, cant_paneles, largo_m,
-    apoyos, estructura, lista_precios,
+    apoyos, estructura,
     tiene_cumbrera, tiene_canalon, tipo_gotero_frontal,
   };
   const paredParams = {
@@ -133,40 +133,54 @@ function generarCotizacion(params) {
     aberturas, num_aberturas,
     num_esq_ext, num_esq_int,
     incl_k2, incl_5852,
-    estructura, lista_precios,
+    estructura,
   };
 
+  // ── PHASE 1: collect raw quantities for ALL sections — zero price lookups ──
+  const rawSecciones = [];
+
   if (escenario === 'solo_techo' || escenario === 'techo_fachada') {
-    secciones.push(calcTechoCompleto(techoParams));
+    rawSecciones.push(calcCantidadesTecho(techoParams));
   }
 
   if (escenario === 'solo_fachada' || escenario === 'techo_fachada') {
-    secciones.push(calcParedCompleto(paredParams));
+    rawSecciones.push(calcCantidadesPared(paredParams));
   }
 
   if (escenario === 'camara_frigorifica') {
-    secciones.push(calcTechoCompleto(techoParams));
-
     const alto_m = 3; // fixed height for cold room
-    const paredFrontal = calcParedCompleto({
-      ...paredParams,
-      largo_m: alto_m,
-    });
-    paredFrontal.tipo = 'pared_frontal_posterior';
-    secciones.push(paredFrontal);
 
-    const paredLateral = calcParedCompleto({
-      familia,
-      espesor_mm,
-      ancho_m: largo_m,
+    rawSecciones.push(calcCantidadesTecho(techoParams));
+
+    const rawFrontal = calcCantidadesPared({ ...paredParams, largo_m: alto_m });
+    rawFrontal.tipo = 'pared_frontal_posterior';
+    rawSecciones.push(rawFrontal);
+
+    const rawLateral = calcCantidadesPared({
+      familia, espesor_mm,
+      ancho_m: largo_m,       // the long side of the cold room
       cant_paneles: undefined,
       largo_m: alto_m,
       num_aberturas: 0,
       estructura,
-      lista_precios,
     });
-    paredLateral.tipo = 'pared_lateral';
-    secciones.push(paredLateral);
+    rawLateral.tipo = 'pared_lateral';
+    rawSecciones.push(rawLateral);
+  }
+
+  // ── PHASE 2: resolve ALL prices in ONE batch across ALL sections combined ──
+  // Deduplication is handled inside batchGetPrices (uses Set internally).
+  // Example savings vs old approach:
+  //   techo_fachada:     21 lookups → 16 unique SKUs  (−24%)
+  //   camara_frigorifica: ~40 lookups → ~20 unique SKUs (−50%)
+  const allSkus  = rawSecciones.flatMap(raw => raw.rawItems.map(i => i.sku));
+  const priceMap = batchGetPrices(allSkus, lista_precios);
+
+  // ── PHASE 3: enrich each section and build the final secciones array ──
+  for (const raw of rawSecciones) {
+    const { rawItems, ...meta } = raw;
+    const { items, subtotal } = enrichRawItems(rawItems, priceMap);
+    secciones.push({ ...meta, items, subtotal });
   }
 
   const subtotal_sin_iva = secciones.reduce((acc, s) => acc + s.subtotal, 0);

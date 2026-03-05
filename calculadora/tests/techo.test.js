@@ -50,14 +50,14 @@ describe('calcTechoCompleto — ISODEC EPS 100mm 5×11m', () => {
     expect(item).toBeDefined();
   });
 
-  test('tornillos TMOME presentes', () => {
-    const item = result.items.find(i => i.sku === 'TMOME');
+  test('varilla roscada VARILLA38 presente (sist. varilla_tuerca)', () => {
+    const item = result.items.find(i => i.sku === 'VARILLA38');
     expect(item).toBeDefined();
     expect(item.cantidad).toBeGreaterThan(0);
   });
 
-  test('arandelas ARATRAP presentes', () => {
-    const item = result.items.find(i => i.sku === 'ARATRAP');
+  test('arandela carrocero ARCA38 presente (sist. varilla_tuerca)', () => {
+    const item = result.items.find(i => i.sku === 'ARCA38');
     expect(item).toBeDefined();
     expect(item.cantidad).toBeGreaterThan(0);
   });
@@ -152,9 +152,10 @@ describe('calcTechoCompleto — ISOROOF 3G 50mm 4×8m', () => {
     expect(item).toBeDefined();
   });
 
-  test('NO incluye caballete inventado (solo SKUs reales de catálogo)', () => {
-    const item = result.items.find(i => i.descripcion && i.descripcion.toLowerCase().includes('caballete'));
-    expect(item).toBeUndefined();
+  test('incluye caballete (sist. caballete_tornillo de ISOROOF)', () => {
+    const item = result.items.find(i => i.sku === 'CABALLETE');
+    expect(item).toBeDefined();
+    expect(item.cantidad).toBeGreaterThan(0);
   });
 
   test('NO incluye varilla roscada inventada', () => {
