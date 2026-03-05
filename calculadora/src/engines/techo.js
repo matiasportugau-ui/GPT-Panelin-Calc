@@ -97,11 +97,12 @@ function calcTechoCompleto({ familia, espesor_mm, ancho_m, largo_m, apoyos = 0, 
 
   // Perfilería de bordes (perímetro)
   const perimetro = 2 * (ancho_m + largo_m);
+  const cantBorde = Math.ceil(perimetro);
   const precioBorde = resolverPrecio('perfil_borde_m', lista_precios);
-  const costoBorde = perimetro * precioBorde;
+  const costoBorde = cantBorde * precioBorde;
   items.push({
     descripcion: 'Perfil de borde (perímetro)',
-    cantidad: Math.ceil(perimetro),
+    cantidad: cantBorde,
     unidad: 'm',
     precio_unit: precioBorde,
     subtotal: costoBorde,

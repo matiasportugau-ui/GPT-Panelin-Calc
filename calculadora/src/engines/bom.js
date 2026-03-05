@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { calcTechoCompleto } = require('./techo');
 const { calcParedCompleto } = require('./pared');
 const { validarAutoportancia } = require('./autoportancia');
-const { ivaRate } = require('./precios');
+const { ivaRate, envioReferencia } = require('./precios');
 
 const ESCENARIOS_VALIDOS = ['solo_techo', 'solo_fachada', 'techo_fachada', 'camara_frigorifica'];
 
@@ -43,8 +43,9 @@ function generarCotizacion(params) {
   const warnings = [];
   const secciones = [];
 
-  // Validación autoportancia
-  const autop = validarAutoportancia(familia, espesor_mm, largo_m);
+  // Validación autoportancia: valida la luz entre apoyos, no el largo total
+  const luzReal = apoyos > 0 ? largo_m / (apoyos + 1) : largo_m;
+  const autop = validarAutoportancia(familia, espesor_mm, luzReal);
   if (!autop.valido) {
     warnings.push(autop.mensaje);
   }
@@ -95,7 +96,7 @@ function generarCotizacion(params) {
       moneda: 'USD',
     },
     warnings,
-    envio_referencia_usd: 280,
+    envio_referencia_usd: envioReferencia(),
     nota: 'Precios sin IVA. IVA 22% aplicado al total final. Consultar disponibilidad de stock.',
   };
 }

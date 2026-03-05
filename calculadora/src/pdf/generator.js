@@ -6,6 +6,8 @@
  * En entorno serverless, devuelve un Buffer con el PDF en bytes.
  */
 
+const { jsPDF } = require('jspdf');
+
 /**
  * Genera un PDF de cotización y devuelve el buffer.
  * @param {Object} cotizacion - Objeto cotización generado por bom.js
@@ -13,9 +15,6 @@
  * @returns {Buffer} Buffer del PDF generado
  */
 async function generarPDF(cotizacion, cliente = {}) {
-  // Dynamic import para compatibilidad ESM/CJS
-  const { jsPDF } = await import('jspdf');
-
   const doc = new jsPDF({ unit: 'mm', format: 'a4' });
 
   const margenIzq = 15;
@@ -119,7 +118,8 @@ async function generarPDF(cotizacion, cliente = {}) {
 
   doc.setFont('helvetica', 'italic');
   doc.setFontSize(8);
-  doc.text(cotizacion.nota, margenIzq, y);
+  const nota = typeof cotizacion.nota === 'string' ? cotizacion.nota : '';
+  doc.text(nota, margenIzq, y);
 
   return Buffer.from(doc.output('arraybuffer'));
 }

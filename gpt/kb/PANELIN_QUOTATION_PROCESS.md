@@ -52,15 +52,18 @@ Content-Type: application/json
 La API devuelve:
 ```json
 {
-  "cotizacion_id": "uuid-...",
-  "secciones": [...],
-  "resumen": {
-    "subtotal_sin_iva": 1250.00,
-    "iva_22": 275.00,
-    "total_con_iva": 1525.00,
-    "moneda": "USD"
-  },
-  "warnings": []
+  "ok": true,
+  "cotizacion": {
+    "cotizacion_id": "uuid-...",
+    "secciones": [...],
+    "resumen": {
+      "subtotal_sin_iva": 1250.00,
+      "iva_22": 275.00,
+      "total_con_iva": 1525.00,
+      "moneda": "USD"
+    },
+    "warnings": []
+  }
 }
 ```
 

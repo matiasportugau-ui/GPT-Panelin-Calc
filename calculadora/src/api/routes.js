@@ -54,22 +54,66 @@ router.post('/api/cotizar', (req, res) => {
       estructura,
     } = req.body;
 
-    // Validaciones mínimas
+    // Validaciones mínimas de presencia
     if (!escenario) return res.status(400).json({ ok: false, error: 'Campo requerido: escenario' });
     if (!familia) return res.status(400).json({ ok: false, error: 'Campo requerido: familia' });
-    if (!espesor_mm) return res.status(400).json({ ok: false, error: 'Campo requerido: espesor_mm' });
-    if (!ancho_m) return res.status(400).json({ ok: false, error: 'Campo requerido: ancho_m' });
-    if (!largo_m) return res.status(400).json({ ok: false, error: 'Campo requerido: largo_m' });
+    if (espesor_mm === undefined || espesor_mm === null || espesor_mm === '') {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: espesor_mm' });
+    }
+    if (ancho_m === undefined || ancho_m === null || ancho_m === '') {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: ancho_m' });
+    }
+    if (largo_m === undefined || largo_m === null || largo_m === '') {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: largo_m' });
+    }
+
+    // Normalización y validación de numéricos
+    const espesorNum = Number(espesor_mm);
+    const anchoNum = Number(ancho_m);
+    const largoNum = Number(largo_m);
+
+    if (!Number.isFinite(espesorNum) || espesorNum <= 0) {
+      return res.status(400).json({ ok: false, error: 'espesor_mm debe ser un número finito > 0' });
+    }
+    if (!Number.isFinite(anchoNum) || anchoNum <= 0) {
+      return res.status(400).json({ ok: false, error: 'ancho_m debe ser un número finito > 0' });
+    }
+    if (!Number.isFinite(largoNum) || largoNum <= 0) {
+      return res.status(400).json({ ok: false, error: 'largo_m debe ser un número finito > 0' });
+    }
+
+    let apoyosNum = 0;
+    if (apoyos !== undefined && apoyos !== null && apoyos !== '') {
+      apoyosNum = Number(apoyos);
+      if (!Number.isFinite(apoyosNum) || apoyosNum < 0) {
+        return res.status(400).json({ ok: false, error: 'apoyos debe ser un número finito >= 0 cuando se especifica' });
+      }
+    }
+
+    let aberturasNum = 0;
+    if (num_aberturas !== undefined && num_aberturas !== null && num_aberturas !== '') {
+      aberturasNum = Number(num_aberturas);
+      if (!Number.isFinite(aberturasNum) || aberturasNum < 0) {
+        return res.status(400).json({ ok: false, error: 'num_aberturas debe ser un número finito >= 0 cuando se especifica' });
+      }
+    }
+
+    // Validación de lista de precios
+    const listaPreciosNormalizada = lista_precios || 'venta';
+    const listasValidas = ['venta', 'web'];
+    if (!listasValidas.includes(listaPreciosNormalizada)) {
+      return res.status(400).json({ ok: false, error: 'lista_precios inválida. Valores permitidos: venta, web' });
+    }
 
     const cotizacion = generarCotizacion({
       escenario,
       familia,
-      espesor_mm: Number(espesor_mm),
-      ancho_m: Number(ancho_m),
-      largo_m: Number(largo_m),
-      lista_precios: lista_precios || 'venta',
-      apoyos: apoyos ? Number(apoyos) : 0,
-      num_aberturas: num_aberturas ? Number(num_aberturas) : 0,
+      espesor_mm: espesorNum,
+      ancho_m: anchoNum,
+      largo_m: largoNum,
+      lista_precios: listaPreciosNormalizada,
+      apoyos: apoyosNum,
+      num_aberturas: aberturasNum,
       estructura: estructura || 'metal',
     });
 

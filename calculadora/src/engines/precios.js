@@ -42,6 +42,13 @@ function ivaRate() {
 }
 
 /**
+ * Devuelve la referencia de envío en USD desde precios.json.
+ */
+function envioReferencia() {
+  return precios.envio_referencia_usd;
+}
+
+/**
  * Catálogo completo de familias disponibles.
  */
 function catalogoFamilias() {
@@ -51,4 +58,4 @@ function catalogoFamilias() {
   }));
 }
 
-module.exports = { resolverPrecio, resolverPanelInfo, ivaRate, catalogoFamilias };
+module.exports = { resolverPrecio, resolverPanelInfo, ivaRate, envioReferencia, catalogoFamilias };
