@@ -104,11 +104,11 @@ function resolverGoteroData(familia, espesor_mm) {
 }
 
 /**
- * Add an accessory item to the BOM list. Skips if sku is null.
+ * Add an accessory item to the BOM list. Skips if sku is null, cantidad is not finite, or cantidad <= 0.
  * @returns {number} subtotal added
  */
 function addItem(items, { sku, descripcion, cantidad, unidad, lista_precios }) {
-  if (!sku || cantidad <= 0) return 0;
+  if (!sku || !Number.isFinite(cantidad) || cantidad <= 0) return 0;
   const acc = getAccessoryInfo(sku, lista_precios);
   const precio_unit = acc.precio;
   const subtotal = Math.round(cantidad * precio_unit * 100) / 100;
@@ -149,8 +149,9 @@ function calcTechoCompleto({
     anchoEfectivo = cantP * au_m;
   }
 
-  const area_m2 = Math.round(cantP * au_m * largo_m * 100) / 100;
-  const costo_paneles = Math.round(area_m2 * precio_m2 * 100) / 100;
+  const areaRaw = cantP * au_m * largo_m;
+  const area_m2 = Math.round(areaRaw * 100) / 100;
+  const costo_paneles = Math.round(areaRaw * precio_m2 * 100) / 100;
   const precio_unit_panel = Math.round(precio_m2 * au_m * largo_m * 100) / 100;
 
   const items = [];
@@ -235,7 +236,7 @@ function calcTechoCompleto({
   }
 
   // 8. Tornillos TMOME (~6 per m²)
-  const cantTornillos = Math.ceil(area_m2 * 6);
+  const cantTornillos = Math.ceil(areaRaw * 6);
   subtotal += addItem(items, {
     sku: 'TMOME',
     descripcion: 'Tornillo TMOME (madera/metal)',
@@ -264,7 +265,7 @@ function calcTechoCompleto({
   });
 
   // 11. Silicona Bromplast (1 cartucho per 15 m²)
-  const cantSilicona = Math.ceil(area_m2 / 15);
+  const cantSilicona = Math.ceil(areaRaw / 15);
   subtotal += addItem(items, {
     sku: 'Bromplast',
     descripcion: 'Silicona Bromplast (600ml)',

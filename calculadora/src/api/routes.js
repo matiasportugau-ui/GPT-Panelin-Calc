@@ -162,6 +162,7 @@ router.post('/api/cotizar', (req, res) => {
       envio_usd: envioNum,
     });
 
+    const cotizacion = generarCotizacion(parsed.params);
     cacheCotizacion(cotizacion);
     res.json({ ok: true, cotizacion });
   } catch (err) {

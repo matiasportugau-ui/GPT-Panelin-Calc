@@ -363,4 +363,62 @@ describe('POST /api/pdf', () => {
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
   });
+
+  test('400 en parámetros directos cuando falta largo_m', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: 5,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/largo_m/);
+  });
+
+  test('400 en parámetros directos cuando faltan ancho_m y cant_paneles', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        largo_m: 11,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/ancho_m|cant_paneles/);
+  });
+
+  test('400 en parámetros directos cuando espesor_mm no es numérico', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 'abc',
+        ancho_m: 5,
+        largo_m: 11,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/espesor_mm/);
+  });
+
+  test('400 en parámetros directos cuando ancho_m es string vacío', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: '',
+        largo_m: 11,
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/ancho_m|cant_paneles/);
+  });
 });
