@@ -1,12 +1,12 @@
 {
   "version": 2,
   "functions": {
-    "src/api/server.js": {
+    "api/index.js": {
       "maxDuration": 30,
       "includeFiles": "src/data/catalog_real.csv"
     }
   },
   "rewrites": [
-    { "source": "/(.*)", "destination": "/src/api/server.js" }
+    { "source": "/(.*)", "destination": "/api/index.js" }
   ]
 }
