@@ -34,7 +34,7 @@ describe('calcTechoCompleto — ISODEC EPS 100mm 5x11m', () => {
     expect(descripciones.some(d => d.includes('varilla') || d.includes('Varilla'))).toBe(true);
     expect(descripciones.some(d => d.includes('tuerca') || d.includes('Tuerca') || d.includes('set') || d.includes('Set'))).toBe(true);
     expect(descripciones.some(d => d.includes('borde') || d.includes('Borde') || d.includes('perímetro') || d.includes('Perfil'))).toBe(true);
-    expect(descripciones.some(d => d.includes('ellador'))).toBe(true);
+    expect(descripciones.some(d => d.includes('Sellador') || d.includes('sellador'))).toBe(true);
   });
 
   test('area_m2 es correcto', () => {
