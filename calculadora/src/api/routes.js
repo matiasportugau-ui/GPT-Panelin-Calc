@@ -20,6 +20,19 @@ function cacheCotizacion(cotizacion) {
   cotizacionCache.set(cotizacion.cotizacion_id, cotizacion);
 }
 
+/**
+ * Parse a boolean value correctly, handling strings "false"/"0" as false.
+ */
+function parseBool(val) {
+  if (val === undefined || val === null) return false;
+  if (typeof val === 'boolean') return val;
+  if (typeof val === 'string') {
+    const lower = val.toLowerCase().trim();
+    return lower !== '' && lower !== 'false' && lower !== '0';
+  }
+  return Boolean(val);
+}
+
 // GET /health
 router.get('/health', (_req, res) => {
   res.json({ status: 'ok', service: 'calculadora-bmc', version: '5.0.0' });
@@ -96,6 +109,11 @@ router.post('/api/cotizar', (req, res) => {
       }
     }
 
+    // Reject ambiguous requests that send both ancho_m and cant_paneles
+    if (anchoNum !== null && cantPanelesNum !== null) {
+      return res.status(400).json({ ok: false, error: 'No se pueden enviar simultaneamente ancho_m y cant_paneles; use solo uno de los dos' });
+    }
+
     if (anchoNum === null && cantPanelesNum === null) {
       return res.status(400).json({ ok: false, error: 'Se requiere ancho_m o cant_paneles' });
     }
@@ -139,8 +157,8 @@ router.post('/api/cotizar', (req, res) => {
       apoyos: apoyosNum,
       num_aberturas: aberturasNum,
       estructura: estructura || 'metal',
-      tiene_cumbrera: Boolean(tiene_cumbrera),
-      tiene_canalon: Boolean(tiene_canalon),
+      tiene_cumbrera: parseBool(tiene_cumbrera),
+      tiene_canalon: parseBool(tiene_canalon),
       envio_usd: envioNum,
     });
 
@@ -184,8 +202,8 @@ router.post('/api/pdf', async (req, res) => {
         apoyos: Number(b.apoyos || 0),
         num_aberturas: Number(b.num_aberturas || 0),
         estructura: b.estructura || 'metal',
-        tiene_cumbrera: Boolean(b.tiene_cumbrera),
-        tiene_canalon: Boolean(b.tiene_canalon),
+        tiene_cumbrera: parseBool(b.tiene_cumbrera),
+        tiene_canalon: parseBool(b.tiene_canalon),
         envio_usd: b.envio_usd != null ? Number(b.envio_usd) : undefined,
       });
       cacheCotizacion(cotizacion);
