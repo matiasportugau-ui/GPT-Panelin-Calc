@@ -11,7 +11,7 @@ paths:
   /api/cotizar:
     post:
       operationId: cotizar
-      summary: Genera una cotización completa con BOM detallado (SKUs reales del catálogo), precios, IVA 22% y warnings de autoportancia
+      summary: "Genera una cotización completa con BOM detallado. ⚠️ GUARDAR cotizacion_id de la respuesta — se necesita para /api/pdf."
       requestBody:
         required: true
         content:
@@ -31,8 +31,13 @@ paths:
   /api/pdf:
     post:
       operationId: generarPDF
-      summary: Genera un PDF descargable de una cotización ya generada
-      description: Requiere el objeto cotización completo retornado por POST /api/cotizar en el campo cotizacion_data. Opcionalmente incluir datos del cliente.
+      summary: Genera un PDF descargable de una cotización
+      description: |
+        FLUJO CORRECTO PARA PDF:
+        1. Si tenés cotizacion_id de /api/cotizar → usar { cotizacion_id, cliente }
+        2. Si NO tenés cotizacion_id pero sí params completos → llamar PRIMERO /api/cotizar, obtener cotizacion_id, y LUEGO llamar este endpoint
+        3. Si falta info crítica → NO llamar. Informar que falta cotización previa.
+        NUNCA llamar sin cotizacion_id válido o parámetros completos.
       requestBody:
         required: true
         content:
@@ -172,10 +177,11 @@ components:
           type: boolean
         cotizacion:
           type: object
-          description: Presentar TODOS estos campos al cliente sin omitir ni modificar valores.
+          description: "Presentar TODOS estos campos al cliente. ⚠️ GUARDAR cotizacion_id — se necesita para /api/pdf."
           properties:
             cotizacion_id:
               type: string
+              description: "⚠️ GUARDAR SIEMPRE. UUID único de esta cotización. Necesario para generar el PDF después."
             fecha:
               type: string
             escenario:
@@ -244,11 +250,16 @@ components:
 
     PDFRequest:
       type: object
-      description: "Acepta 3 formas: (1) cotizacion_id del resultado previo de /api/cotizar, (2) cotizacion_data completa, (3) los mismos parametros de /api/cotizar para generar y descargar en un paso."
+      description: |
+        ORDEN DE PREFERENCIA:
+        1. cotizacion_id (más simple y confiable — UUID de /api/cotizar)
+        2. Los mismos parámetros de /api/cotizar (regenera la cotización y genera PDF)
+        3. cotizacion_data completa (objeto entero de /api/cotizar)
+        SIEMPRE incluir cliente con nombre/celular/direccion.
       properties:
         cotizacion_id:
           type: string
-          description: "UUID de una cotizacion generada previamente con POST /api/cotizar. Forma mas simple."
+          description: "FORMA PREFERIDA. UUID de una cotización generada previamente con POST /api/cotizar. Siempre guardar este ID cuando se cotiza."
         cotizacion_data:
           type: object
           description: "Objeto completo cotizacion retornado por POST /api/cotizar (alternativa a cotizacion_id)"
