@@ -77,11 +77,20 @@ function calcParedCompleto({
     warnings.push('No hay Perfil U definido en catálogo para ' + familia + ' ' + espesor_mm + 'mm');
   }
 
-  // Fijaciones para estructura metal/mixto: TMOME + ARATRAP (~5.5 por m²)
+  // Fijaciones según estructura
   if (estructura === 'metal' || estructura === 'mixto') {
     const cantFij = Math.ceil(area_m2 * 5.5);
     subtotal += addItem(items, warnings, 'TMOME', cantFij, lista_precios, 'Tornillo madera/metal');
     subtotal += addItem(items, warnings, 'ARATRAP', cantFij, lista_precios, 'Arandela Trapezoidal');
+  } else if (estructura === 'hormigon') {
+    // Sistema Varilla Roscada para paredes sobre hormigón
+    const varillas = Math.max(3, cantP + 1);
+    subtotal += addItem(items, warnings, 'VR1M38', varillas, lista_precios, 'Varilla Roscada BSW 1m 3/8"');
+    subtotal += addItem(items, warnings, 'TUE38G', varillas * 8, lista_precios, 'Tuerca Galvanizada BSW 3/8"');
+    subtotal += addItem(items, warnings, 'ARD38C', varillas * 4, lista_precios, 'Arandela Carrocero Galv. 3/8"');
+    subtotal += addItem(items, warnings, 'ARD38P', varillas * 4, lista_precios, 'Arandela Plana Galv. 3/8"');
+    subtotal += addItem(items, warnings, 'ARD38PP', varillas * 4, lista_precios, 'Arandela Blanca Polipropileno 3/8"');
+    subtotal += addItem(items, warnings, 'TACOEXP', cantP * 4, lista_precios, 'Taco Expansivo P. Hormigón 3/8"');
   }
 
   // Remaches POP: 2 por panel (unión entre paneles)
@@ -97,8 +106,8 @@ function calcParedCompleto({
   if (cantButilo > 0) {
     subtotal += addItem(items, warnings, 'C.But.', cantButilo, lista_precios, 'Cinta Butilo');
   }
-  // Silicona: 1 cada 15m²
-  subtotal += addItem(items, warnings, 'Bromplast', Math.ceil(area_m2 / 15), lista_precios, 'Silicona Neutra Bromplast');
+  // Silicona: 1 cada 10m²
+  subtotal += addItem(items, warnings, 'Bromplast', Math.ceil(area_m2 / 10), lista_precios, 'Silicona Neutra Bromplast');
 
   return {
     tipo: 'pared',

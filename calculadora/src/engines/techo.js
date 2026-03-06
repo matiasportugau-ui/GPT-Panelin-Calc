@@ -38,6 +38,7 @@ function calcTechoCompleto({
   lista_precios = 'venta',
   tiene_cumbrera = false,
   tiene_canalon = false,
+  estructura = 'metal',
 }) {
   const panelInfo = getPanelByFamilyAndThickness(familia, espesor_mm, lista_precios);
   const { sku: skuPanel, au_m, precio_m2, nombre: nombrePanel } = panelInfo;
@@ -105,22 +106,42 @@ function calcTechoCompleto({
     }
   }
 
-  // Fijaciones: ISOROOF → Caballete Rojo; otros → TMOME + ARATRAP
-  const cantFij = Math.ceil(area_m2 * 6);
+  // Fijaciones: ISOROOF → Caballete Rojo; ISODEC → sistema Varilla Roscada BSW
   if (familia.startsWith('ISOROOF')) {
+    const cantFij = Math.ceil(area_m2 * 6);
     subtotal += addItem(items, warnings, 'Cab. Roj', cantFij, lista_precios, 'Caballete Rojo');
+    // Sellado: cinta butilo entre paneles (solo ISOROOF)
+    const cantButilo = Math.ceil((cantP - 1) * largo_m / CINTA_BUTILO_ML);
+    if (cantButilo > 0) {
+      subtotal += addItem(items, warnings, 'C.But.', cantButilo, lista_precios, 'Cinta Butilo');
+    }
   } else {
-    subtotal += addItem(items, warnings, 'TMOME', cantFij, lista_precios, 'Tornillo madera/metal');
-    subtotal += addItem(items, warnings, 'ARATRAP', cantFij, lista_precios, 'Arandela Trapezoidal');
+    // Sistema Varilla Roscada para paneles ISODEC (EPS y PIR)
+    // Fórmula derivada de cotizaciones reales BMC: 1 varilla por junta entre paneles + bordes
+    const varillas = Math.max(3, cantP + 1);
+    subtotal += addItem(items, warnings, 'VR1M38', varillas, lista_precios, 'Varilla Roscada BSW 1m 3/8"');
+    subtotal += addItem(items, warnings, 'TUE38G', varillas * 8, lista_precios, 'Tuerca Galvanizada BSW 3/8"');
+    subtotal += addItem(items, warnings, 'ARD38C', varillas * 4, lista_precios, 'Arandela Carrocero Galv. 3/8"');
+    subtotal += addItem(items, warnings, 'ARD38P', varillas * 4, lista_precios, 'Arandela Plana Galv. 3/8"');
+    subtotal += addItem(items, warnings, 'ARD38PP', varillas * 4, lista_precios, 'Arandela Blanca Polipropileno 3/8"');
+    // Remaches: fórmula empírica validada en cotizaciones reales (aprox. 3.5/m²)
+    const cantRemaches = Math.max(60, Math.ceil(area_m2 * 3.5));
+    subtotal += addItem(items, warnings, 'REMPOP1', cantRemaches, lista_precios, 'Remache POP ó T1 P. Mecha 5/32×1/2"');
+    // Membrana + Espuma bajo babeta (cuando existe gotero superior)
+    const skuGS_check = getGoteroSuperiorSKU(familia, espesor_mm);
+    if (skuGS_check) {
+      const cantBabeta = Math.ceil(cantP / 7);
+      subtotal += addItem(items, warnings, 'MEMBAAUTO', cantBabeta, lista_precios, 'Membrana Auto-adhesiva .3×10m');
+      subtotal += addItem(items, warnings, 'ESPUMAPU', cantBabeta, lista_precios, 'Espuma Poliuretano Expansiva 750ml');
+    }
+    // Taco Expansivo: solo para estructura de hormigón
+    if (estructura === 'hormigon') {
+      subtotal += addItem(items, warnings, 'TACOEXP', cantP * 4, lista_precios, 'Taco Expansivo P. Hormigón 3/8"');
+    }
   }
 
-  // Sellado: cinta butilo entre paneles
-  const cantButilo = Math.ceil((cantP - 1) * largo_m / CINTA_BUTILO_ML);
-  if (cantButilo > 0) {
-    subtotal += addItem(items, warnings, 'C.But.', cantButilo, lista_precios, 'Cinta Butilo');
-  }
-  // Silicona: 1 cada 15m²
-  subtotal += addItem(items, warnings, 'Bromplast', Math.ceil(area_m2 / 15), lista_precios, 'Silicona Neutra Bromplast');
+  // Silicona: 1 cada 10m²
+  subtotal += addItem(items, warnings, 'Bromplast', Math.ceil(area_m2 / 10), lista_precios, 'Silicona Neutra Bromplast');
 
   return {
     tipo: 'techo',

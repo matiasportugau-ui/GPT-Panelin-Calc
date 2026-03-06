@@ -58,7 +58,7 @@ function generarCotizacion(params) {
     warnings.push(autop.mensaje);
   }
 
-  const techoParams = { familia, espesor_mm, ancho_m, cant_paneles, largo_m, apoyos, lista_precios, tiene_cumbrera, tiene_canalon };
+  const techoParams = { familia, espesor_mm, ancho_m, cant_paneles, largo_m, apoyos, lista_precios, tiene_cumbrera, tiene_canalon, estructura };
   const paredParams = { familia, espesor_mm, ancho_m, cant_paneles, largo_m, num_aberturas, estructura, lista_precios };
 
   if (escenario === 'solo_techo' || escenario === 'techo_fachada') {

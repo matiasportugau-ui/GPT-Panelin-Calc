@@ -52,10 +52,11 @@ describe('calcTechoCompleto — ISODEC EPS 100mm 5×11m', () => {
     expect(gl.cantidad).toBeGreaterThan(0);
   });
 
-  test('fijaciones TMOME + ARATRAP presentes', () => {
+  test('fijaciones sistema Varilla Roscada presente (no TMOME)', () => {
     const skus = result.items.map(i => i.sku);
-    expect(skus).toContain('TMOME');
-    expect(skus).toContain('ARATRAP');
+    expect(skus).toContain('VR1M38');
+    expect(skus).not.toContain('TMOME');
+    expect(skus).not.toContain('ARATRAP');
   });
 
   test('sin canalón por defecto', () => {
@@ -140,7 +141,7 @@ describe('calcTechoCompleto — input por cant_paneles', () => {
     });
     expect(result.tipo).toBe('techo');
     expect(result.cant_paneles).toBe(10);
-    expect(result.ancho_m).toBeCloseTo(10 * 1.10, 2);
+    expect(result.ancho_m).toBeCloseTo(10 * 1.00, 2);
     expect(result.subtotal).toBeGreaterThan(0);
   });
 });

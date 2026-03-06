@@ -58,9 +58,9 @@ function extractPrice(row, type = 'venta') {
 // ─── Panel definitions ────────────────────────────────────────────────────────
 // ancho_util (au_m) is a physical property not in the CSV
 const AU_BY_FAMILY = {
-  ISOROOF_3G:    1.10,
-  ISOROOF_FOIL:  1.10,
-  ISOROOF_PLUS:  1.10,
+  ISOROOF_3G:    1.00,
+  ISOROOF_FOIL:  1.00,
+  ISOROOF_PLUS:  1.00,
   ISODEC_PIR:    1.12,
   ISODEC_EPS:    1.12,
   ISOWALL_PIR:   1.00,
@@ -73,7 +73,7 @@ const PANEL_SKU = {
   ISOROOF_3G:   { 30: 'IROOF30', 40: 'IROOF40', 50: 'IROOF50', 80: 'IROOF80', 100: 'IROOF100' },
   ISOROOF_FOIL: { 30: 'IAGRO30', 50: 'IAGRO50' },
   ISOROOF_PLUS: { 50: 'IROOF50-PLS', 80: 'IROOF80-PLS' },
-  ISODEC_PIR:   { 50: 'ISD50PIR', 80: 'ISD80PIR' },
+  ISODEC_PIR:   { 50: 'ISD50PIR', 80: 'ISD80PIR', 120: 'ISD120PIR' },
   ISOWALL_PIR:  { 50: 'IW50', 80: 'IW80', 100: 'IW100' },
   ISOFRIG_PIR:  { 40: 'IF40', 60: 'IF60 - IFSL60', 80: 'IF80 - IFSL80', 100: 'IF100 - IFSL100', 150: 'IF150 - IFSL150' },
   ISOPANEL_EPS: { 50: 'ISD50EPS', 100: 'ISD100EPS', 150: 'ISD150EPS', 200: 'ISD200EPS', 250: 'ISD250EPS' },
@@ -92,7 +92,7 @@ const GOTERO_FRONTAL_SKU = {
   ISOROOF_3G:   { 30: 'GFS30',   50: 'GFS50',   80: 'GFS80' },
   ISOROOF_FOIL: { 30: 'GFS30',   50: 'GFS50' },
   ISOROOF_PLUS: { 50: 'GFS50',   80: 'GFS80' },
-  ISODEC_PIR:   { 50: 'GF80DC',  80: 'GF120DC' },
+  ISODEC_PIR:   { 50: 'GF80DC',  80: 'GF120DC', 120: 'GF120DC' },
   ISODEC_EPS:   { 100: '6838',   150: '6839',   200: '6840',  250: '6841' },
 };
 
@@ -100,7 +100,7 @@ const GOTERO_SUPERIOR_SKU = {
   ISOROOF_3G:   { 30: 'GFSUP30', 40: 'GFSUP40', 50: 'GFSUP50', 80: 'GFSUP80' },
   ISOROOF_FOIL: { 30: 'GFSUP30', 50: 'GFSUP50' },
   ISOROOF_PLUS: { 50: 'GFSUP50', 80: 'GFSUP80' },
-  ISODEC_PIR:   { 50: '6828',    80: '6828' },   // babeta de adosar
+  ISODEC_PIR:   { 50: '6828',    80: '6828',    120: '6828' },  // babeta de adosar
   ISODEC_EPS:   { 100: '6828',   150: '6828',   200: '6828',  250: '6828' },
 };
 
@@ -108,7 +108,7 @@ const GOTERO_LATERAL_SKU = {
   ISOROOF_3G:   { 30: 'GL30',    40: 'GL40',    50: 'GL50',   80: 'GL80' },
   ISOROOF_FOIL: { 30: 'GL30',    50: 'GL50' },
   ISOROOF_PLUS: { 50: 'GL50',    80: 'GL80' },
-  ISODEC_PIR:   { 50: 'GL80DC',  80: 'GL120DC' },
+  ISODEC_PIR:   { 50: 'GL80DC',  80: 'GL120DC', 120: 'GL120DC' },
   ISODEC_EPS:   { 100: '6842',   150: '6843',   200: '6844',  250: '6845' },
 };
 
@@ -211,7 +211,7 @@ function listFamilies() {
     { familia: 'ISOROOF_3G',   espesores: [30, 40, 50, 80, 100], composicion: 'PIR' },
     { familia: 'ISOROOF_FOIL', espesores: [30, 50],              composicion: 'PIR' },
     { familia: 'ISOROOF_PLUS', espesores: [50, 80],              composicion: 'PIR', nota: 'Mínimo 800m²' },
-    { familia: 'ISODEC_PIR',   espesores: [50, 80],              composicion: 'PIR', nota: '50mm: EVITAR' },
+    { familia: 'ISODEC_PIR',   espesores: [50, 80, 120],         composicion: 'PIR', nota: '50mm: EVITAR' },
     { familia: 'ISODEC_EPS',   espesores: [100, 150, 200, 250],  composicion: 'EPS' },
     { familia: 'ISOWALL_PIR',  espesores: [50, 80, 100],         composicion: 'PIR' },
     { familia: 'ISOFRIG_PIR',  espesores: [40, 60, 80, 100, 150], composicion: 'PIR' },
