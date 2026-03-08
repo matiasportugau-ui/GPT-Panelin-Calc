@@ -14,13 +14,13 @@ cd GPT-Panelin-Calc
 cd calculadora/
 npm install
 
-# Verificar que los tests pasan (41 tests)
+# Verificar que los tests pasan (69 tests)
 npm test
 ```
 
 Resultado esperado:
 ```
-Tests:  41 passed, 41 total
+Tests:  69 passed, 69 total
 ```
 
 ---
@@ -208,3 +208,54 @@ cd calculadora/ && vercel --prod
 | Warning "luz supera máximo" | `largo_m` mayor que luz máxima para ese panel | Normal si hay apoyos intermedios: especificar `apoyos` en el request |
 | PDF vacío o error | `cotizacion_data` mal formado | Usar el objeto `cotizacion` directamente desde la respuesta de `/api/cotizar` |
 | Tests fallan localmente | `node_modules` desactualizado | `cd calculadora && npm install` |
+
+---
+
+## Sugerencia y plan de solución
+
+Para evolucionar el sistema con el menor riesgo posible, la recomendación es priorizar mejoras de validación y robustez en la API antes de agregar nuevas capacidades.
+
+### Prioridad 1 — Unificar validaciones de cotización
+- Extraer la validación/coerción de `POST /api/cotizar` y `POST /api/pdf` a una única función compartida.
+- Objetivo: evitar divergencias entre ambos endpoints y garantizar los mismos errores de entrada.
+- Entregable sugerido:
+  - helper reutilizable en `calculadora/src/api/routes.js`
+  - tests de API para cubrir errores equivalentes en ambos endpoints
+
+### Prioridad 2 — Validar compatibilidad entre ancho y modulación real
+- Cuando el usuario envía `ancho_m`, validar o informar explícitamente la diferencia entre el ancho pedido y el ancho real cotizado según `au_m`.
+- Objetivo: evitar cotizaciones que redondeen paneles sin dejar visible el excedente.
+- Entregable sugerido:
+  - warning técnico en la respuesta JSON
+  - tests de integración para casos con redondeo
+
+### Prioridad 3 — Hacer explícitos los faltantes de accesorios/SKUs
+- Si una familia o accesorio no tiene SKU/precio resuelto en catálogo, devolver warning claro o error controlado en vez de omitirlo silenciosamente.
+- Objetivo: asegurar BOMs completos y evitar PDFs con faltantes no visibles.
+- Entregable sugerido:
+  - validación en `catalog.js` o en los engines `techo.js` / `pared.js`
+  - tests que cubran familias con accesorios opcionales o no disponibles
+
+### Prioridad 4 — Mejorar resiliencia de generación de PDF
+- Mantener la opción de `cotizacion_data` como camino principal y reducir la dependencia del cache en memoria para flujos críticos.
+- Objetivo: evitar errores por reinicios o expiración implícita en entornos serverless.
+- Entregable sugerido:
+  - documentar que `cotizacion_data` es la opción recomendada
+  - considerar persistencia externa solo si el negocio realmente necesita regeneración diferida por `cotizacion_id`
+
+### Plan de implementación recomendado
+1. **Fase 1: validación**
+   - refactor mínimo de parsing/validación
+   - tests de API dirigidos
+2. **Fase 2: warnings técnicos**
+   - ancho real vs ancho pedido
+   - accesorios faltantes
+3. **Fase 3: robustez operativa**
+   - mejora de flujo de PDF/cache
+   - documentación de integración
+
+### Criterio de éxito
+- Mismos inputs inválidos producen respuestas consistentes en `/api/cotizar` y `/api/pdf`
+- La cotización informa cuando el ancho real difiere del solicitado
+- No se omiten accesorios críticos sin aviso explícito
+- El flujo recomendado de PDF queda documentado y probado
