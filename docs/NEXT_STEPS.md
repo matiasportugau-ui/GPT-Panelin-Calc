@@ -14,13 +14,13 @@ cd GPT-Panelin-Calc
 cd calculadora/
 npm install
 
-# Verificar que los tests pasan (69 tests)
+# Verificar que los tests pasan
 npm test
 ```
 
 Resultado esperado:
 ```
-Tests:  69 passed, 69 total
+Tests:  all passed
 ```
 
 ---

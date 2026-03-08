@@ -38,7 +38,7 @@ Los dos repositorios originales se bloqueaban entre sí:
 - Engines como módulos Node.js reutilizables
 - Precios y SKUs en `src/data/catalog_real.csv` indexado por `catalog.js`
 - PDF generado en servidor
-- 41 tests unitarios e integración
+- Tests unitarios e integración
 
 ## Guía de Migración
 
