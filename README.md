@@ -3,9 +3,33 @@
 ![Node.js](https://img.shields.io/badge/Node.js-18%2B-green)
 ![React](https://img.shields.io/badge/React-18%2B-blue)
 ![License](https://img.shields.io/badge/License-No%20especificada-lightgrey)
-![Tests](https://img.shields.io/badge/Tests-41%20passing-brightgreen)
+![Tests](https://img.shields.io/badge/Tests-passing-brightgreen)
 
 Monorepo que unifica **GPT Panelin** (cerebro conversacional) con **Calculadora BMC** (motor programático de cálculo) para paneles sándwich Panelin — BMC Uruguay.
+
+## Resumen y explicación rápida
+
+### ¿Qué es?
+Es un sistema dividido en dos partes:
+
+- **GPT Panelin**: conversa con el cliente, entiende qué necesita y captura los datos de la obra.
+- **Calculadora BMC API**: hace los cálculos reales de materiales, BOM, precios, IVA y PDF.
+
+### ¿Cómo funciona?
+1. El cliente describe lo que necesita en lenguaje natural.
+2. El GPT extrae parámetros como tipo de obra, familia de panel, espesor, ancho y largo.
+3. El GPT llama a la API para cotizar.
+4. La API devuelve una cotización exacta con:
+   - ítems y cantidades,
+   - SKUs reales,
+   - subtotal,
+   - IVA 22%,
+   - total final,
+   - warnings técnicos si aplica.
+5. Si el cliente quiere, se genera un PDF con esa cotización.
+
+### ¿Qué problema resuelve?
+Evita que el GPT “invente” cálculos o precios. Toda la lógica sensible queda centralizada en la API para que las cotizaciones sean repetibles, auditables y consistentes.
 
 ## Arquitectura v5.0
 
@@ -22,10 +46,10 @@ Calculadora BMC API        →    Cálculos deterministas, BOM con SKUs reales, 
 | Aspecto | Antes (repos separados) | Después (v5.0) |
 |---------|------------------------|----------------|
 | **IVA** | Ambiguo (incluido / al final) | ✅ Unificado: 22% al total, sin incluir en unitarios |
-| **Precios / SKUs** | 6+ archivos JSON + hardcoded | ✅ Fuente única: `catalog_real.csv` vía `catalog.js` |
+| **Precios / SKUs** | 6+ archivos JSON + hardcoded | ✅ Fuente principal: `catalog_real.csv` vía `catalog.js` (con algunas familias legacy hardcodeadas en `catalog.js`) |
 | **BOM** | GPT generativo + engines separados | ✅ Solo engines deterministas vía API |
 | **PDF** | reportlab (Python) + jsPDF (browser) | ✅ jsPDF en Node.js vía API |
-| **Tests** | Sin tests | ✅ 41 tests unitarios + integración |
+| **Tests** | Sin tests | ✅ Tests unitarios + integración |
 | **GPT tokens** | ~32KB instrucciones con fórmulas | ✅ ~120 líneas de config limpia |
 
 ## Estructura
@@ -45,7 +69,7 @@ GPT-Panelin-Calc/
 │   │   │   └── precios.json        # Precios de respaldo (legacy)
 │   │   ├── api/            # server.js, routes.js
 │   │   └── pdf/generator.js
-│   └── tests/              # 41 tests Jest
+│   └── tests/              # Tests Jest
 ├── frontend/               # UI standalone (backward compatible)
 │   └── PanelinCalculadoraV3.jsx
 └── docs/
@@ -64,7 +88,7 @@ cd calculadora/
 npm install
 npm start        # Producción
 npm run dev      # Desarrollo con nodemon
-npm test         # 41 tests
+npm test         # Tests Jest
 ```
 
 ### Endpoints
