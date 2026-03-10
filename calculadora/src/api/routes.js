@@ -169,6 +169,157 @@ router.post('/api/cotizar', (req, res) => {
   }
 });
 
+// POST /api/cotizar-bmc
+// Bridge to external Calculadora-BMC API
+// Transforms internal parameters to Calculadora-BMC format and vice versa
+router.post('/api/cotizar-bmc', async (req, res) => {
+  try {
+    const {
+      escenario, familia, espesor_mm, ancho_m, largo_m,
+      lista_precios = 'web',
+      estructura = 'metal',
+      tiene_canalon = false,
+      tiene_cumbrera = false,
+      envio_usd = 0,
+    } = req.body;
+
+    // Validate required fields
+    if (!escenario) return res.status(400).json({ ok: false, error: 'Campo requerido: escenario' });
+    if (!familia) return res.status(400).json({ ok: false, error: 'Campo requerido: familia' });
+    if (!espesor_mm && espesor_mm !== 0) return res.status(400).json({ ok: false, error: 'Campo requerido: espesor_mm' });
+    if (!largo_m && largo_m !== 0) return res.status(400).json({ ok: false, error: 'Campo requerido: largo_m' });
+
+    // Map escenario to Calculadora-BMC format
+    const scenarioMap = {
+      'solo_techo': 'solo_techo',
+      'solo_fachada': 'solo_fachada',
+      'techo_fachada': 'techo_fachada',
+      'camara_frigorifica': 'camara_frig',
+    };
+
+    const scenario = scenarioMap[escenario] || escenario;
+
+    // Build Calculadora-BMC API payload
+    const payload = {
+      scenario,
+      listaPrecios: lista_precios === 'venta' ? 'venta' : 'web',
+    };
+
+    // Add techo parameters if scenario includes techo
+    if (['solo_techo', 'techo_fachada', 'camara_frig'].includes(escenario)) {
+      payload.techo = {
+        familia,
+        espesor: Number(espesor_mm),
+        color: 'Blanco',
+        largo: Number(largo_m),
+        ancho: Number(ancho_m) || 5.0,
+        tipoEst: estructura,
+        ptsHorm: 0,
+        borders: {
+          frente: tiene_cumbrera ? 'gotero_frontal' : 'none',
+          fondo: 'gotero_frontal',
+          latIzq: 'gotero_lateral',
+          latDer: 'gotero_lateral',
+        },
+        opciones: {
+          inclCanalon: parseBool(tiene_canalon),
+          inclGotSup: false,
+          inclSell: true,
+        },
+      };
+    }
+
+    // Add pared parameters if scenario includes pared
+    if (['solo_fachada', 'techo_fachada', 'camara_frigorifica'].includes(escenario)) {
+      payload.pared = {
+        familia,
+        espesor: Number(espesor_mm),
+        color: 'Blanco',
+        alto: 3.5,
+        perimetro: Number(ancho_m) * 2 || 40,
+        numEsqExt: 4,
+        numEsqInt: 0,
+        aberturas: [],
+        tipoEst: estructura,
+        inclSell: true,
+        incl5852: false,
+      };
+    }
+
+    // Add camara parameters if needed
+    if (escenario === 'camara_frigorifica') {
+      payload.camara = {
+        largo_int: Number(largo_m),
+        ancho_int: Number(ancho_m) || 5.0,
+        alto_int: 3.0,
+      };
+    }
+
+    if (envio_usd > 0) {
+      payload.flete = Number(envio_usd);
+    }
+
+    // Call external Calculadora-BMC API
+    const response = await fetch('https://calculadora-bmc.vercel.app/api/cotizar', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      timeout: 30000,
+    });
+
+    if (!response.ok) {
+      return res.status(response.status).json({
+        ok: false,
+        error: `Calculadora-BMC API error: ${response.status} ${response.statusText}`,
+      });
+    }
+
+    const bmc_data = await response.json();
+
+    if (!bmc_data.success) {
+      return res.status(400).json({
+        ok: false,
+        error: bmc_data.error || 'Calculadora-BMC API returned error',
+      });
+    }
+
+    // Transform Calculadora-BMC response to internal format
+    const cotizacion = {
+      cotizacion_id: require('uuid').v4(),
+      fuente: 'calculadora-bmc',
+      escenario,
+      familia,
+      espesor_mm: Number(espesor_mm),
+      largo_m: Number(largo_m),
+      ancho_m: Number(ancho_m) || null,
+      lista_precios,
+      resumen: {
+        subtotal_sin_iva: bmc_data.totals.subtotalSinIVA || 0,
+        iva_22: bmc_data.totals.iva || 0,
+        total_con_iva: bmc_data.totals.totalFinal || 0,
+      },
+      secciones: (bmc_data.bom || []).map((group) => ({
+        tipo: group.title.toLowerCase(),
+        items: (group.items || []).map((item) => ({
+          sku: item.sku || 'N/A',
+          nombre: item.label || item.nombre || '',
+          cantidad: item.cant || 0,
+          unit: item.unidad || 'm²',
+          precio_unitario_sin_iva: item.pu || 0,
+          subtotal_sin_iva: item.total || 0,
+        })),
+      })),
+      warnings: bmc_data.results?.warnings || [],
+    };
+
+    cacheCotizacion(cotizacion);
+    res.json({ ok: true, cotizacion });
+  } catch (err) {
+    console.error('Error calling Calculadora-BMC API:', err);
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
 // POST /api/pdf
 // Accepts EITHER:
 //   1. { cotizacion_data, cliente } - full cotizacion object
