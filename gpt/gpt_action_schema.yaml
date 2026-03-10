@@ -28,6 +28,34 @@ paths:
         "400":
           description: Parámetros inválidos o faltantes. Mostrar error.message al cliente.
 
+  /api/cotizar-bmc:
+    post:
+      operationId: cotizarBMC
+      summary: "Bridge a Calculadora-BMC externa: Genera cotización delegando a https://calculadora-bmc.vercel.app. Devuelve formato compatible con /api/cotizar. ⚠️ GUARDAR cotizacion_id — necesario para /api/pdf."
+      description: |
+        Endpoint bridge que comunica con la Calculadora-BMC desplegada en Vercel.
+        - Transforma parámetros GPT-Panelin al formato Calculadora-BMC
+        - Llama a la API externa
+        - Transforma respuesta al formato interno
+        - Cachea para PDF como /api/cotizar
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CotizarRequest'
+      responses:
+        "200":
+          description: Cotización generada desde Calculadora-BMC. Formato compatible con /api/cotizar.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CotizarResponse'
+        "400":
+          description: Parámetros inválidos, faltantes, o error en Calculadora-BMC.
+        "500":
+          description: Error de conexión a Calculadora-BMC externa.
+
   /api/pdf:
     post:
       operationId: generarPDF
