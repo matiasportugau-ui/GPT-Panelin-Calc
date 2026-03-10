@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "buildCommand": "cd calculadora && npm install",
+  "functions": {
+    "calculadora/src/api/server.js": {
+      "maxDuration": 30,
+      "includeFiles": "calculadora/src/data/**"
+    }
+  },
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/calculadora/src/api/server.js" }
+  ]
+}
