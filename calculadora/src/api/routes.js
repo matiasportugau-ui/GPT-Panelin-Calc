@@ -15,6 +15,10 @@ const {
   getQuoteVersionFile,
   getQuoteFolderPath,
 } = require('../quotes/service');
+const { buildAutomationPrompt } = require('../ai/prompt');
+const { parseJsonBlock } = require('../ai/parser');
+const { runProviderCompletion, resolveProviderConfig } = require('../ai/providers');
+const { executeAutomationFromParsed } = require('../ai/automation');
 
 const router = express.Router();
 
@@ -310,6 +314,66 @@ router.get('/api/quotes/:quoteRef/folder', (req, res) => {
     res.json({ ok: true, folder_path: folderPath });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/ai/prompt?provider=openai
+router.get('/api/ai/prompt', (req, res) => {
+  try {
+    const provider = req.query.provider || 'openai';
+    const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+    const prompt = buildAutomationPrompt({ provider, apiBaseUrl });
+    const providerConfig = resolveProviderConfig(provider);
+    res.json({
+      ok: true,
+      provider: providerConfig.provider,
+      model: providerConfig.model,
+      prompt,
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/ai/automate
+router.post('/api/ai/automate', async (req, res) => {
+  try {
+    const provider = req.body.provider || 'openai';
+    const userMessage = String(req.body.user_message || '').trim();
+    const autoExecute = req.body.auto_execute !== false;
+    const context = req.body.context || {};
+
+    if (!userMessage) {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: user_message' });
+    }
+
+    const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+    const systemPrompt = buildAutomationPrompt({ provider, apiBaseUrl });
+    const llm = await runProviderCompletion({
+      provider,
+      systemPrompt,
+      userMessage: `${userMessage}\n\nContext:\n${JSON.stringify(context, null, 2)}`,
+    });
+
+    const parsed = parseJsonBlock(llm.content);
+    let execution = null;
+    if (autoExecute && parsed) {
+      execution = await executeAutomationFromParsed(parsed, {
+        ...context,
+        issued_by: req.body.issued_by || 'ai-automation-endpoint',
+      });
+    }
+
+    res.json({
+      ok: true,
+      provider: llm.provider,
+      model: llm.model,
+      ai_text: llm.content,
+      parsed_output: parsed,
+      execution,
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
   }
 });
 

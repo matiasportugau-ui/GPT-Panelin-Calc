@@ -116,6 +116,7 @@ Ver `docs/DEPLOYMENT.md` para instrucciones de configuración del GPT Action.
 - [BMC-017 QA checklist E2E y regresión](docs/BMC_URUGUAY_BMC017_QA_CHECKLIST.md)
 - [BMC-018 Runbook operativo y rollback](docs/BMC_URUGUAY_BMC018_RUNBOOK.md)
 - [Cloud agents: setup base y caché recomendado](docs/CLOUD_AGENT_ENV_SETUP.md)
+- [AI Console multi-provider (OpenAI/Gemini/Grok)](docs/BMC_AI_AUTOMATION_CONSOLE.md)
 - [Integración completa](docs/INTEGRATION.md)
 - [Arquitectura v4.0](docs/ARCHITECTURE.md)
 - [Migración desde v3](docs/MIGRATION_FROM_V3.md)

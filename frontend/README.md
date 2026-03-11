@@ -9,6 +9,11 @@ Funciona de manera independiente sin requerir la API backend.
 - `POST /api/quotes/calculate`
 - `POST /api/quotes/issue`
 
+`BmcAiConsole.jsx` agrega una consola unificada para OpenAI/Gemini/Grok:
+
+- `GET /api/ai/prompt`
+- `POST /api/ai/automate`
+
 ## Uso Standalone
 
 ```bash
@@ -40,6 +45,22 @@ function App() {
   return <PanelinCalculadoraV4Api apiBaseUrl="http://localhost:3000" />;
 }
 ```
+
+## Uso AI Console (OpenAI/Gemini/Grok)
+
+```jsx
+import BmcAiConsole from './components/BmcAiConsole';
+
+function App() {
+  return <BmcAiConsole apiBaseUrl="http://localhost:3000" />;
+}
+```
+
+Variables de entorno backend recomendadas:
+
+- `OPENAI_API_KEY`
+- `GEMINI_API_KEY`
+- `GROK_API_KEY` (o `XAI_API_KEY`)
 
 ## Diferencias v3 vs v4.0
 
