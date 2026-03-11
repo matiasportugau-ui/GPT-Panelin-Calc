@@ -35,7 +35,8 @@ describe('POST /api/convert-docx', () => {
       const res = await request(app)
         .post('/api/convert-docx')
         .attach('file', tmpTxt);
-      expect(res.status).toBe(500);
+      expect(res.status).toBe(400);
+      expect(res.body.ok).toBe(false);
     } finally {
       fs.unlinkSync(tmpTxt);
     }

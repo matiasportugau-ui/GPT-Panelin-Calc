@@ -271,7 +271,14 @@ router.post('/api/pdf', async (req, res) => {
 
 // POST /api/convert-docx
 // Accepts a DOCX file upload and returns the converted PDF.
-router.post('/api/convert-docx', upload.single('file'), async (req, res) => {
+router.post('/api/convert-docx', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({ ok: false, error: 'Se requiere un archivo DOCX en el campo "file".' });
@@ -287,6 +294,9 @@ router.post('/api/convert-docx', upload.single('file'), async (req, res) => {
     });
     res.send(pdfBuffer);
   } catch (err) {
+    if (err.message.includes('no es un DOCX válido')) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
     res.status(500).json({ ok: false, error: err.message });
   }
 });

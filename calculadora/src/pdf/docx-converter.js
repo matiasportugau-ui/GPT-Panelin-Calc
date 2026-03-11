@@ -14,8 +14,18 @@ async function convertDocxToPdf(docxBuffer, outputFormat = '.pdf') {
     throw new Error('Se requiere un Buffer DOCX válido y no vacío.');
   }
 
-  const pdfBuffer = await libre.convert(docxBuffer, outputFormat, undefined);
-  return pdfBuffer;
+  // Validate DOCX magic bytes (DOCX is a ZIP file starting with PK\x03\x04)
+  if (docxBuffer[0] !== 0x50 || docxBuffer[1] !== 0x4B ||
+      docxBuffer[2] !== 0x03 || docxBuffer[3] !== 0x04) {
+    throw new Error('El archivo no es un DOCX válido.');
+  }
+
+  try {
+    const pdfBuffer = await libre.convert(docxBuffer, outputFormat, undefined);
+    return pdfBuffer;
+  } catch (err) {
+    throw new Error('Error al convertir DOCX a PDF: ' + err.message);
+  }
 }
 
 /**
