@@ -36,6 +36,18 @@ Para editable:
 - `BMC Tracker -> Crear editable para fila actual`
 - `BMC Tracker -> Completar editables faltantes`
 
+Para emision por API:
+
+- `BMC Tracker -> Configurar API emision`
+- `BMC Tracker -> Emitir cotizacion por API (fila actual)`
+
+Para seguimiento y follow-up:
+
+- `BMC Tracker -> Configurar email de alertas`
+- `BMC Tracker -> Enviar resumen diario ahora`
+- `BMC Tracker -> Alertar vencidos ahora`
+- `BMC Tracker -> Generar cola de follow-up`
+
 Para detalle completo, ver:
 
 - `docs/BMC_URUGUAY_BMC005_TRACKER_SETUP.md`
@@ -43,3 +55,5 @@ Para detalle completo, ver:
 - `docs/BMC_URUGUAY_BMC007_CORRELATIVO_SETUP.md`
 - `docs/BMC_URUGUAY_BMC008_DRIVE_FOLDERS_SETUP.md`
 - `docs/BMC_URUGUAY_BMC009_EDITABLE_SETUP.md`
+- `docs/BMC_URUGUAY_BMC010_011_012_PIPELINE.md`
+- `docs/BMC_URUGUAY_BMC013_BMC014_AUTOMATIONS.md`

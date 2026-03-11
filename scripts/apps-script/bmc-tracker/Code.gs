@@ -1,12 +1,15 @@
 const SHEET_TRACKER = "Tracker";
 const SHEET_CONFIG = "Config";
 const SHEET_DASHBOARD = "Dashboard";
+const SHEET_FOLLOWUP_QUEUE = "FollowUpQueue";
 const START_ROW = 2;
 const MAX_ROWS = 2000;
 const QUOTE_SEQ_PROP_PREFIX = "BMC_QUOTE_SEQ_";
 const DRIVE_ROOT_FOLDER_ID_PROP = "BMC_DRIVE_ROOT_FOLDER_ID";
 const DRIVE_QUOTES_ROOT_NAME = "Cotizaciones";
 const EDITABLE_TEMPLATE_FILE_ID_PROP = "BMC_EDITABLE_TEMPLATE_FILE_ID";
+const API_BASE_URL_PROP = "BMC_API_BASE_URL";
+const NOTIFICATION_EMAIL_PROP = "BMC_NOTIFICATION_EMAIL";
 
 const HEADERS = [
   "Fecha",
@@ -84,6 +87,14 @@ function onOpen() {
     .addItem("Ver plantilla editable", "showEditableTemplateStatus")
     .addItem("Crear editable para fila actual", "createEditableForActiveRow")
     .addItem("Completar editables faltantes", "createEditablesForPendingRows")
+    .addSeparator()
+    .addItem("Configurar API emision", "promptApiBaseUrl")
+    .addItem("Emitir cotizacion por API (fila actual)", "issueQuoteForActiveRowViaApi")
+    .addSeparator()
+    .addItem("Configurar email de alertas", "promptNotificationEmail")
+    .addItem("Enviar resumen diario ahora", "sendDailySummaryNow")
+    .addItem("Alertar vencidos ahora", "alertOverdueLeadsNow")
+    .addItem("Generar cola de follow-up", "generateFollowUpQueue")
     .addToUi();
 }
 
@@ -627,6 +638,437 @@ function extractDriveIdFromUrl_(url) {
     throw new Error("No se pudo extraer ID de Drive desde URL: " + value);
   }
   return idMatch[0];
+}
+
+function promptApiBaseUrl() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    "Configurar API de emision",
+    "Ingresa base URL (ejemplo: https://calculadora-bmc.vercel.app).",
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+  const baseUrl = sanitizeBaseUrl_(response.getResponseText());
+  if (!baseUrl) {
+    throw new Error("Base URL invalida.");
+  }
+  PropertiesService.getScriptProperties().setProperty(API_BASE_URL_PROP, baseUrl);
+  SpreadsheetApp.getUi().alert("API configurada: " + baseUrl);
+}
+
+function issueQuoteForActiveRowViaApi() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== SHEET_TRACKER) {
+    throw new Error("La hoja activa debe ser Tracker.");
+  }
+
+  const row = sheet.getActiveRange().getRow();
+  if (row < START_ROW) {
+    throw new Error("Selecciona una fila de datos valida (>= " + START_ROW + ").");
+  }
+
+  const baseUrl = getApiBaseUrl_();
+  const client = {
+    nombre: String(sheet.getRange(row, 2).getValue() || "").trim(),
+    telefono: String(sheet.getRange(row, 3).getValue() || "").trim(),
+  };
+  if (!client.nombre) {
+    throw new Error("Cliente es obligatorio para emitir.");
+  }
+
+  const technicalInput = {
+    escenario: String(sheet.getRange(row, 6).getValue() || "").trim(),
+    familia: String(sheet.getRange(row, 7).getValue() || "").trim(),
+    espesor_mm: Number(sheet.getRange(row, 8).getValue()),
+    ancho_m: Number(sheet.getRange(row, 9).getValue()),
+    largo_m: Number(sheet.getRange(row, 10).getValue()),
+    color: String(sheet.getRange(row, 11).getValue() || "").trim(),
+  };
+
+  if (!technicalInput.escenario || !technicalInput.familia) {
+    throw new Error("Escenario y familia son obligatorios para calculo API.");
+  }
+  if (!Number.isFinite(technicalInput.espesor_mm) || technicalInput.espesor_mm <= 0) {
+    throw new Error("Espesor_mm invalido.");
+  }
+  if (!Number.isFinite(technicalInput.largo_m) || technicalInput.largo_m <= 0) {
+    throw new Error("Largo_m invalido.");
+  }
+  if (!Number.isFinite(technicalInput.ancho_m) || technicalInput.ancho_m <= 0) {
+    delete technicalInput.ancho_m;
+  }
+
+  const calcResp = postJson_(baseUrl + "/api/quotes/calculate", {
+    client,
+    technical_input: technicalInput,
+  });
+  if (!calcResp.ok) {
+    throw new Error("Error calculate: " + (calcResp.error || "desconocido"));
+  }
+
+  const quoteRef = String(sheet.getRange(row, 19).getValue() || "").trim();
+  const statusLabel = String(sheet.getRange(row, 13).getValue() || "Emitida").trim();
+  const statusTarget = statusLabelToCanonical_(statusLabel);
+  const payload = {
+    client,
+    calculation_result: calcResp.calculation_result,
+    status_target: statusTarget,
+    issued_by: Session.getActiveUser().getEmail() || "apps-script",
+  };
+  if (quoteRef) {
+    payload.quote_ref = quoteRef;
+  }
+
+  const issueResp = postJson_(baseUrl + "/api/quotes/issue", payload);
+  if (!issueResp.ok) {
+    throw new Error("Error issue: " + (issueResp.error || "desconocido"));
+  }
+
+  writeIssueResponseToRow_(sheet, row, issueResp, baseUrl);
+  SpreadsheetApp.getUi().alert(
+    "Cotizacion emitida\nRef: " + issueResp.quote_ref + "\nVersion: V" + issueResp.version
+  );
+}
+
+function writeIssueResponseToRow_(sheet, row, issueResp, baseUrl) {
+  const now = new Date();
+  const currentRef = String(sheet.getRange(row, 19).getValue() || "").trim();
+  const currentVersion = Number(sheet.getRange(row, 20).getValue() || 0);
+
+  sheet.getRange(row, 19).setValue(issueResp.quote_ref);
+  sheet.getRange(row, 20).setValue(issueResp.version);
+  sheet.getRange(row, 21).setValue(now);
+  sheet.getRange(row, 22).setValue(issueResp.subtotal || 0);
+  sheet.getRange(row, 23).setValue(issueResp.iva_22 || 0);
+  sheet.getRange(row, 24).setValue(issueResp.total || 0);
+
+  const pdfUrl = absolutizeApiUrl_(baseUrl, issueResp.links?.pdf_url || "");
+  const pdfCell = sheet.getRange(row, 26);
+  const currentPdf = String(pdfCell.getValue() || "").trim();
+  const isSameVersion = currentRef === issueResp.quote_ref && currentVersion === Number(issueResp.version);
+  if (!currentPdf || !isSameVersion) {
+    pdfCell.setValue(pdfUrl);
+  }
+
+  const payloadUrl = absolutizeApiUrl_(baseUrl, issueResp.links?.payload_url || "");
+  if (!sheet.getRange(row, 18).getValue() && payloadUrl) {
+    sheet.getRange(row, 18).setValue("Payload: " + payloadUrl);
+  }
+
+  if (!sheet.getRange(row, 27).getValue() && hasDriveRootConfigured_()) {
+    try {
+      ensureDriveFolderLinkForRow_(sheet, row);
+    } catch (_err) {
+      // best effort
+    }
+  }
+  if (!sheet.getRange(row, 25).getValue() && hasEditableTemplateConfigured_()) {
+    try {
+      ensureEditableLinkForRow_(sheet, row);
+    } catch (_err) {
+      // best effort
+    }
+  }
+
+  sheet.getRange(row, 34).setValue(now);
+}
+
+function postJson_(url, body) {
+  const response = UrlFetchApp.fetch(url, {
+    method: "post",
+    contentType: "application/json",
+    payload: JSON.stringify(body),
+    muteHttpExceptions: true,
+  });
+  const text = response.getContentText() || "";
+  let parsed = {};
+  try {
+    parsed = JSON.parse(text);
+  } catch (_err) {
+    parsed = { ok: false, error: text || "Respuesta no JSON" };
+  }
+  if (response.getResponseCode() >= 400) {
+    return { ok: false, error: parsed.error || ("HTTP " + response.getResponseCode()) };
+  }
+  return parsed;
+}
+
+function getApiBaseUrl_() {
+  const base = PropertiesService.getScriptProperties().getProperty(API_BASE_URL_PROP);
+  if (!base) {
+    throw new Error("No hay API configurada. Usa menu: Configurar API emision.");
+  }
+  return sanitizeBaseUrl_(base);
+}
+
+function sanitizeBaseUrl_(value) {
+  const base = String(value || "").trim().replace(/\/+$/, "");
+  if (!/^https?:\/\//i.test(base)) return "";
+  return base;
+}
+
+function absolutizeApiUrl_(baseUrl, endpointPath) {
+  const p = String(endpointPath || "").trim();
+  if (!p) return "";
+  if (/^https?:\/\//i.test(p)) return p;
+  return baseUrl + (p.startsWith("/") ? p : "/" + p);
+}
+
+function statusLabelToCanonical_(label) {
+  const key = String(label || "").trim().toLowerCase();
+  const map = {
+    "borrador": "BORRADOR",
+    "falta informacion": "FALTA_INFORMACION",
+    "calculada": "CALCULADA",
+    "emitida": "EMITIDA",
+    "enviada": "ENVIADA",
+    "en seguimiento": "EN_SEGUIMIENTO",
+    "ajustando": "AJUSTANDO",
+    "aprobada": "APROBADA",
+    "rechazada": "RECHAZADA",
+    "vencida": "VENCIDA",
+  };
+  return map[key] || "EMITIDA";
+}
+
+function promptNotificationEmail() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    "Configurar email de alertas",
+    "Ingresa email destino para resumenes y alertas.",
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+  const email = String(response.getResponseText() || "").trim();
+  if (!isValidEmail_(email)) {
+    throw new Error("Email invalido.");
+  }
+  PropertiesService.getScriptProperties().setProperty(NOTIFICATION_EMAIL_PROP, email);
+  ui.alert("Email de alertas configurado: " + email);
+}
+
+function sendDailySummaryNow() {
+  const email = getNotificationEmail_();
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_TRACKER);
+  if (!sheet) throw new Error("No existe hoja Tracker.");
+
+  const rows = getTrackerRows_(sheet);
+  const openRows = rows.filter((r) => r.resultado_final === "Abierto");
+  const highRows = openRows.filter((r) => r.prioridad === "Alta");
+  const overdueRows = openRows.filter((r) => r.vencido === "Si");
+  const pendingQuoteRows = openRows.filter((r) =>
+    ["Borrador", "Falta informacion", "Calculada", "Ajustando"].includes(r.estado_cotizacion)
+  );
+
+  const byOwner = {};
+  openRows.forEach((r) => {
+    const key = r.responsable || "SIN_ASIGNAR";
+    if (!byOwner[key]) byOwner[key] = { abiertos: 0, vencidos: 0 };
+    byOwner[key].abiertos += 1;
+    if (r.vencido === "Si") byOwner[key].vencidos += 1;
+  });
+
+  const lines = [
+    "Resumen diario comercial - BMC Uruguay",
+    "",
+    "Leads abiertos: " + openRows.length,
+    "Alta prioridad: " + highRows.length,
+    "Vencidos: " + overdueRows.length,
+    "Pendientes de cotizacion: " + pendingQuoteRows.length,
+    "",
+    "Resumen por responsable:",
+  ];
+  Object.keys(byOwner)
+    .sort()
+    .forEach((owner) => {
+      lines.push(
+        "- " +
+          owner +
+          ": abiertos=" +
+          byOwner[owner].abiertos +
+          ", vencidos=" +
+          byOwner[owner].vencidos
+      );
+    });
+
+  const top = openRows
+    .slice()
+    .sort((a, b) => Number(b.score_prioridad || 0) - Number(a.score_prioridad || 0))
+    .slice(0, 5);
+  lines.push("", "Top 5 prioridad:");
+  top.forEach((r) => {
+    lines.push(
+      "- " +
+        r.cliente +
+        " | Estado: " +
+        r.estado_cotizacion +
+        " | Resp: " +
+        (r.responsable || "SIN_ASIGNAR") +
+        " | Score: " +
+        Number(r.score_prioridad || 0)
+    );
+  });
+
+  MailApp.sendEmail({
+    to: email,
+    subject: "BMC Uruguay - Resumen diario comercial",
+    body: lines.join("\n"),
+  });
+}
+
+function alertOverdueLeadsNow() {
+  const email = getNotificationEmail_();
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_TRACKER);
+  if (!sheet) throw new Error("No existe hoja Tracker.");
+  const rows = getTrackerRows_(sheet).filter(
+    (r) => r.resultado_final === "Abierto" && r.vencido === "Si"
+  );
+
+  if (rows.length === 0) {
+    MailApp.sendEmail({
+      to: email,
+      subject: "BMC Uruguay - Alertas de vencidos",
+      body: "Sin oportunidades vencidas al momento.",
+    });
+    return;
+  }
+
+  const grouped = {};
+  rows.forEach((r) => {
+    const owner = r.responsable || "SIN_ASIGNAR";
+    if (!grouped[owner]) grouped[owner] = [];
+    grouped[owner].push(r);
+  });
+
+  const lines = ["Alertas de oportunidades vencidas", ""];
+  Object.keys(grouped)
+    .sort()
+    .forEach((owner) => {
+      lines.push(owner + ":");
+      grouped[owner].forEach((r) => {
+        lines.push(
+          "- " +
+            r.cliente +
+            " | Pedido: " +
+            truncate_(r.pedido, 90) +
+            " | Proxima accion: " +
+            (r.proxima_accion || "sin definir")
+        );
+      });
+      lines.push("");
+    });
+
+  MailApp.sendEmail({
+    to: email,
+    subject: "BMC Uruguay - Leads vencidos (" + rows.length + ")",
+    body: lines.join("\n"),
+  });
+}
+
+function generateFollowUpQueue() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_TRACKER);
+  if (!sheet) throw new Error("No existe hoja Tracker.");
+
+  const rows = getTrackerRows_(sheet).filter(
+    (r) =>
+      r.resultado_final === "Abierto" &&
+      (r.estado_cotizacion === "Enviada" || r.estado_cotizacion === "En seguimiento")
+  );
+
+  const queue = ensureSheet(SpreadsheetApp.getActive(), SHEET_FOLLOWUP_QUEUE);
+  queue.clear();
+  queue
+    .getRange(1, 1, 1, 8)
+    .setValues([[
+      "Cliente",
+      "Telefono",
+      "Responsable",
+      "Estado",
+      "Score",
+      "DiasAbiertos",
+      "MensajeSugerido",
+      "RefCotizacion",
+    ]]);
+
+  const ordered = rows
+    .slice()
+    .sort((a, b) => Number(b.score_prioridad || 0) - Number(a.score_prioridad || 0));
+
+  const values = ordered.map((r) => [
+    r.cliente,
+    r.telefono,
+    r.responsable || "SIN_ASIGNAR",
+    r.estado_cotizacion,
+    Number(r.score_prioridad || 0),
+    Number(r.dias_abiertos || 0),
+    buildFollowUpMessage_(r.cliente),
+    r.ref_cotizacion || "",
+  ]);
+  if (values.length > 0) {
+    queue.getRange(2, 1, values.length, 8).setValues(values);
+  }
+
+  queue.setFrozenRows(1);
+  queue.getRange("A1:H1").setBackground("#111827").setFontColor("#ffffff").setFontWeight("bold");
+  queue.autoResizeColumns(1, 8);
+
+  SpreadsheetApp.getUi().alert("Follow-up queue generada: " + values.length + " filas.");
+}
+
+function getNotificationEmail_() {
+  const email = PropertiesService.getScriptProperties().getProperty(NOTIFICATION_EMAIL_PROP);
+  if (!email || !isValidEmail_(email)) {
+    throw new Error("Configura email de alertas desde el menu BMC Tracker.");
+  }
+  return email;
+}
+
+function isValidEmail_(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || "").trim());
+}
+
+function buildFollowUpMessage_(name) {
+  const safeName = String(name || "cliente").trim();
+  return (
+    "Hola " +
+    safeName +
+    ", te escribo por la cotizacion enviada. Quedo atento para ayudarte a avanzar o ajustar medidas/cantidades."
+  );
+}
+
+function truncate_(value, maxLen) {
+  const text = String(value || "");
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 3) + "...";
+}
+
+function getTrackerRows_(sheet) {
+  const lastRow = sheet.getLastRow();
+  if (lastRow < START_ROW) return [];
+
+  const data = sheet.getRange(START_ROW, 1, lastRow - START_ROW + 1, HEADERS.length).getValues();
+  return data
+    .map((row) => ({
+      fecha: row[0],
+      cliente: String(row[1] || "").trim(),
+      telefono: String(row[2] || "").trim(),
+      origen: String(row[3] || "").trim(),
+      pedido: String(row[4] || "").trim(),
+      prioridad: String(row[11] || "").trim(),
+      estado_cotizacion: String(row[12] || "").trim(),
+      responsable: String(row[13] || "").trim(),
+      proxima_accion: String(row[14] || "").trim(),
+      ref_cotizacion: String(row[18] || "").trim(),
+      dias_abiertos: row[27],
+      vencido: String(row[28] || "").trim(),
+      score_prioridad: row[29],
+      resultado_final: String(row[31] || "").trim(),
+    }))
+    .filter((r) => Boolean(r.cliente));
 }
 
 function getOrCreateChildFolder_(parentFolder, folderName) {
