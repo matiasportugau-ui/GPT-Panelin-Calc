@@ -4,6 +4,11 @@
 `PanelinCalculadoraV3.jsx` es el componente React standalone de la calculadora Panelin.
 Funciona de manera independiente sin requerir la API backend.
 
+`PanelinCalculadoraV4Api.jsx` conecta con backend para cálculo/emisión versionada:
+
+- `POST /api/quotes/calculate`
+- `POST /api/quotes/issue`
+
 ## Uso Standalone
 
 ```bash
@@ -25,6 +30,16 @@ function App() {
 ## Compatibilidad con v4.0
 El componente frontend standalone (v3) mantiene compatibilidad retroactiva.
 Para la arquitectura v4.0 con API backend, usar la `calculadora/` API con GPT Action.
+
+## Uso API (BMC-016)
+
+```jsx
+import PanelinCalculadoraV4Api from './components/PanelinCalculadoraV4Api';
+
+function App() {
+  return <PanelinCalculadoraV4Api apiBaseUrl="http://localhost:3000" />;
+}
+```
 
 ## Diferencias v3 vs v4.0
 
