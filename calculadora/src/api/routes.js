@@ -1,12 +1,28 @@
 'use strict';
 
 const express = require('express');
+const multer = require('multer');
 const { generarCotizacion } = require('../engines/bom');
 const { tablaAutoportancia, validarAutoportancia } = require('../engines/autoportancia');
 const { listFamilies } = require('../data/catalog');
 const { generarPDF } = require('../pdf/generator');
+const { convertDocxToPdf, derivePdfFilename } = require('../pdf/docx-converter');
 
 const router = express.Router();
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 50 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = [
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    if (allowed.includes(file.mimetype) || /\.docx$/i.test(file.originalname)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se aceptan archivos .docx'));
+    }
+  },
+});
 
 // In-memory cache for recent cotizaciones (max 100)
 const cotizacionCache = new Map();
@@ -249,6 +265,36 @@ router.post('/api/pdf', async (req, res) => {
     res.send(pdfBuffer);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/convert-docx
+// Accepts a DOCX file upload and returns the converted PDF.
+router.post('/api/convert-docx', (req, res, next) => {
+  upload.single('file')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ ok: false, error: err.message });
+    }
+    next();
+  });
+}, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ ok: false, error: 'Se requiere un archivo DOCX en el campo "file".' });
+    }
+
+    const pdfBuffer = await convertDocxToPdf(req.file.buffer);
+    const filename = derivePdfFilename(req.file.originalname);
+
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Length': pdfBuffer.length,
+    });
+    res.send(pdfBuffer);
+  } catch (err) {
+    const statusCode = err.code === 'INVALID_DOCX' ? 400 : 500;
+    res.status(statusCode).json({ ok: false, error: err.message });
   }
 });
 
