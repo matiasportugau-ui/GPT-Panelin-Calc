@@ -29,11 +29,13 @@
 │  ✅ Resolución precios (lista venta/web)    │
 │  ✅ Autoportancia + validaciones técnicas   │
 │  ✅ Generación PDF                          │
+│  ✅ Conversión DOCX → PDF (LibreOffice)     │
 │  ✅ JSON estructurado como response         │
 │                                             │
-│  POST /api/cotizar → cotización completa    │
-│  POST /api/pdf     → PDF descargable        │
-│  GET  /api/productos → catálogo             │
+│  POST /api/cotizar       → cotización       │
+│  POST /api/pdf           → PDF cotización   │
+│  POST /api/convert-docx  → DOCX → PDF      │
+│  GET  /api/productos     → catálogo         │
 │  GET  /api/autoportancia → validaciones     │
 └─────────────────────────────────────────────┘
 ```
@@ -63,7 +65,8 @@ GPT-Panelin-Calc/
 │   │   │   ├── server.js
 │   │   │   └── routes.js
 │   │   └── pdf/
-│   │       └── generator.js
+│   │       ├── generator.js
+│   │       └── docx-converter.js
 │   └── tests/
 │
 ├── frontend/               # UI standalone (backward compatible)
