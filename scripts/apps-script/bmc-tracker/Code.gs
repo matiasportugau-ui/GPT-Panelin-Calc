@@ -3,6 +3,7 @@ const SHEET_CONFIG = "Config";
 const SHEET_DASHBOARD = "Dashboard";
 const START_ROW = 2;
 const MAX_ROWS = 2000;
+const QUOTE_SEQ_PROP_PREFIX = "BMC_QUOTE_SEQ_";
 
 const HEADERS = [
   "Fecha",
@@ -68,6 +69,8 @@ function onOpen() {
     .addItem("Reaplicar validaciones", "applyBmcValidations")
     .addItem("Reaplicar formulas", "applyBmcFormulas")
     .addItem("Recrear dashboard", "setupBmcDashboard")
+    .addItem("Asignar REF a fila actual", "assignQuoteRefToActiveRow")
+    .addItem("Ver secuencia actual", "showSequenceStatus")
     .addToUi();
 }
 
@@ -179,8 +182,24 @@ function autoAssignOwner(sheet, row) {
 
 function autoSetStatusDerivedFields(sheet, row) {
   const estado = String(sheet.getRange(row, 13).getValue()).trim();
+  const quoteRefCell = sheet.getRange(row, 19);
+  const versionCell = sheet.getRange(row, 20);
   const fechaEmisionCell = sheet.getRange(row, 21);
   const resultadoCell = sheet.getRange(row, 32);
+
+  if (estado === "Emitida" || estado === "Enviada") {
+    assignQuoteRefIfMissing_(sheet, row);
+    if (!versionCell.getValue()) {
+      versionCell.setValue(1);
+    }
+    if (!fechaEmisionCell.getValue()) {
+      fechaEmisionCell.setValue(new Date());
+    }
+  }
+
+  if (quoteRefCell.getValue() && !versionCell.getValue()) {
+    versionCell.setValue(1);
+  }
 
   if (estado === "Enviada" && !fechaEmisionCell.getValue()) {
     fechaEmisionCell.setValue(new Date());
@@ -197,6 +216,88 @@ function autoSetStatusDerivedFields(sheet, row) {
   } else if (estado === "Vencida") {
     resultadoCell.setValue("Descartado");
   }
+}
+
+function assignQuoteRefToActiveRow() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== SHEET_TRACKER) {
+    throw new Error("La hoja activa debe ser Tracker.");
+  }
+
+  const row = sheet.getActiveRange().getRow();
+  if (row < START_ROW) {
+    throw new Error("Selecciona una fila de datos valida (>= " + START_ROW + ").");
+  }
+
+  const ref = assignQuoteRefIfMissing_(sheet, row);
+  const versionCell = sheet.getRange(row, 20);
+  const updatedAtCell = sheet.getRange(row, 34);
+  if (!versionCell.getValue()) {
+    versionCell.setValue(1);
+  }
+  updatedAtCell.setValue(new Date());
+
+  SpreadsheetApp.getUi().alert("REF asignada: " + ref + " (fila " + row + ")");
+}
+
+function assignQuoteRefIfMissing_(sheet, row) {
+  const quoteRefCell = sheet.getRange(row, 19);
+  const current = String(quoteRefCell.getValue()).trim();
+  if (current) {
+    return current;
+  }
+
+  const quoteRef = reserveNextQuoteRef_();
+  quoteRefCell.setValue(quoteRef);
+  return quoteRef;
+}
+
+function reserveNextQuoteRef_(forcedYear) {
+  const year = forcedYear || new Date().getFullYear();
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+
+  try {
+    const props = PropertiesService.getScriptProperties();
+    const key = getSequenceKey_(year);
+    const current = parseInt(props.getProperty(key) || "0", 10);
+    const safeCurrent = Number.isFinite(current) && current >= 0 ? current : 0;
+    const next = safeCurrent + 1;
+    props.setProperty(key, String(next));
+    return formatQuoteRef_(year, next);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getSequenceKey_(year) {
+  return QUOTE_SEQ_PROP_PREFIX + String(year);
+}
+
+function formatQuoteRef_(year, sequence) {
+  return "BMC-COT-" + String(year) + "-" + String(sequence).padStart(4, "0");
+}
+
+function showSequenceStatus() {
+  const year = new Date().getFullYear();
+  const props = PropertiesService.getScriptProperties();
+  const raw = props.getProperty(getSequenceKey_(year)) || "0";
+  const current = Number.isFinite(parseInt(raw, 10)) ? parseInt(raw, 10) : 0;
+  SpreadsheetApp.getUi().alert(
+    "Secuencia actual " + year + ": " + String(current) + "\nSiguiente REF: " + formatQuoteRef_(year, current + 1)
+  );
+}
+
+function setSequenceForYear(year, value) {
+  const y = Number(year);
+  const v = Number(value);
+  if (!Number.isInteger(y) || y < 2000 || y > 2100) {
+    throw new Error("Anio invalido.");
+  }
+  if (!Number.isInteger(v) || v < 0) {
+    throw new Error("Valor de secuencia invalido.");
+  }
+  PropertiesService.getScriptProperties().setProperty(getSequenceKey_(y), String(v));
 }
 
 function setupTrackerSheet(sheet) {
@@ -267,6 +368,12 @@ function applyTrackerFormatting(sheet) {
   sheet
     .getRange(START_ROW, 22, MAX_ROWS - START_ROW + 1, 3)
     .setNumberFormat("$#,##0.00");
+  sheet
+    .getRange(START_ROW, 19, MAX_ROWS - START_ROW + 1, 1)
+    .setNumberFormat("@");
+  sheet
+    .getRange(START_ROW, 20, MAX_ROWS - START_ROW + 1, 1)
+    .setNumberFormat("0");
   sheet
     .getRange(START_ROW, 33, MAX_ROWS - START_ROW + 1, 2)
     .setNumberFormat("yyyy-mm-dd hh:mm");

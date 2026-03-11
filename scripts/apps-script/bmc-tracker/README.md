@@ -19,7 +19,13 @@ Si solo queres reconstruir el dashboard:
 
 - `BMC Tracker -> Recrear dashboard`
 
+Para correlativo:
+
+- `BMC Tracker -> Asignar REF a fila actual`
+- `BMC Tracker -> Ver secuencia actual`
+
 Para detalle completo, ver:
 
 - `docs/BMC_URUGUAY_BMC005_TRACKER_SETUP.md`
 - `docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md`
+- `docs/BMC_URUGUAY_BMC007_CORRELATIVO_SETUP.md`

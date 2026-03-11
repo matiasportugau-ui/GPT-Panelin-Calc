@@ -106,6 +106,7 @@ Ver `docs/DEPLOYMENT.md` para instrucciones de configuración del GPT Action.
 - [Estructura final del tracker (BMC Uruguay)](docs/BMC_URUGUAY_TRACKER_COLUMNS.md)
 - [BMC-005 Tracker base operativo (setup)](docs/BMC_URUGUAY_BMC005_TRACKER_SETUP.md)
 - [BMC-006 Dashboard gerencial minimo (setup)](docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md)
+- [BMC-007 Correlativo robusto con lock (setup)](docs/BMC_URUGUAY_BMC007_CORRELATIVO_SETUP.md)
 - [Integración completa](docs/INTEGRATION.md)
 - [Arquitectura v4.0](docs/ARCHITECTURE.md)
 - [Migración desde v3](docs/MIGRATION_FROM_V3.md)

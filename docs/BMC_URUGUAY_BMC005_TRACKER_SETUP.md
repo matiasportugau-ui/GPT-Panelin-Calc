@@ -9,6 +9,7 @@ Owner objetivo: A2 Apps Script
 - Manifest: `scripts/apps-script/bmc-tracker/appsscript.json`
 - Columnas canonicas: `docs/BMC_URUGUAY_TRACKER_COLUMNS.md`
 - Dashboard minimo: `docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md`
+- Correlativo robusto: `docs/BMC_URUGUAY_BMC007_CORRELATIVO_SETUP.md`
 
 ## 2) Que hace este paquete
 
@@ -29,6 +30,7 @@ Al ejecutar `setupBmcTracker()`:
    - seteo de `FECHA_EMISION` cuando estado pasa a `Enviada`
    - seteo de `RESULTADO_FINAL` segun estado final
 7. Crea hoja `Dashboard` con KPIs minimos y tablas de resumen.
+8. Implementa correlativo anual con lock para `REF_COTIZACION`.
 
 ## 3) Como instalar en Google Sheets
 
@@ -48,6 +50,8 @@ Al ejecutar `setupBmcTracker()`:
 - `applyBmcValidations()`: reaplica validaciones.
 - `applyBmcFormulas()`: reaplica formulas.
 - `onEdit(e)`: automatizacion en cambios de fila.
+- `assignQuoteRefToActiveRow()`: asigna referencia a la fila seleccionada.
+- `showSequenceStatus()`: muestra secuencia del anio actual.
 
 ## 5) Validaciones incluidas
 
@@ -67,12 +71,12 @@ Se considera cumplido si:
 3. Se calcula score y semaforo automaticamente.
 4. Se registran `CREATED_AT`/`UPDATED_AT` al editar filas con cliente.
 5. Existe dashboard con KPIs base conectados a Tracker.
+6. La referencia de cotizacion se genera de forma unica y correlativa.
 
 ## 7) Limites de esta entrega (intencionales)
 
 Esta base NO incluye aun:
 
-- correlativo robusto con lock (`BMC-007`)
 - creacion de carpetas en Drive (`BMC-008`)
 - clonado de editable (`BMC-009`)
 - integracion con `pdf_generator.py` (`BMC-010`)
