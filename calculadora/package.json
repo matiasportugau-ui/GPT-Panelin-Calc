@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node src/api/server.js",
     "dev": "nodemon src/api/server.js",
-    "test": "jest --runInBand"
+    "test": "jest --runInBand",
+    "bootstrap:agent": "npm install && npm test"
   },
   "dependencies": {
     "cors": "^2.8.5",
