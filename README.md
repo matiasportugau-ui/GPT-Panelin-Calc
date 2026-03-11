@@ -100,6 +100,10 @@ Ver `docs/DEPLOYMENT.md` para instrucciones de configuración del GPT Action.
 
 - [**Pasos a seguir (setup completo)**](docs/NEXT_STEPS.md)
 - [Backlog ejecutable por sprint (BMC Uruguay)](docs/BMC_URUGUAY_BACKLOG_SPRINTS.md)
+- [ADR-001 Naming oficial (BMC Uruguay)](docs/BMC_URUGUAY_ADR_001_NAMING.md)
+- [Maquina de estados de cotizacion (BMC Uruguay)](docs/BMC_URUGUAY_STATE_MACHINE.md)
+- [Contratos de datos y esquemas (BMC Uruguay)](docs/BMC_URUGUAY_DATA_CONTRACTS.md)
+- [Estructura final del tracker (BMC Uruguay)](docs/BMC_URUGUAY_TRACKER_COLUMNS.md)
 - [Integración completa](docs/INTEGRATION.md)
 - [Arquitectura v4.0](docs/ARCHITECTURE.md)
 - [Migración desde v3](docs/MIGRATION_FROM_V3.md)
