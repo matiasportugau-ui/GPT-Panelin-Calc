@@ -15,12 +15,11 @@ const upload = multer({
   fileFilter: (_req, file, cb) => {
     const allowed = [
       'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-      'application/msword',
     ];
-    if (allowed.includes(file.mimetype) || /\.docx?$/i.test(file.originalname)) {
+    if (allowed.includes(file.mimetype) || /\.docx$/i.test(file.originalname)) {
       cb(null, true);
     } else {
-      cb(new Error('Solo se aceptan archivos .doc/.docx'));
+      cb(new Error('Solo se aceptan archivos .docx'));
     }
   },
 });
@@ -294,10 +293,8 @@ router.post('/api/convert-docx', (req, res, next) => {
     });
     res.send(pdfBuffer);
   } catch (err) {
-    if (err.message.includes('no es un DOCX válido')) {
-      return res.status(400).json({ ok: false, error: err.message });
-    }
-    res.status(500).json({ ok: false, error: err.message });
+    const statusCode = err.code === 'INVALID_DOCX' ? 400 : 500;
+    res.status(statusCode).json({ ok: false, error: err.message });
   }
 });
 

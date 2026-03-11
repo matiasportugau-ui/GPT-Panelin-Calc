@@ -2,10 +2,22 @@
 
 const path = require('path');
 const fs = require('fs');
+const { execSync } = require('child_process');
 const request = require('supertest');
 const app = require('../src/api/server');
 
 const FIXTURE_DOCX = path.join(__dirname, 'fixtures', 'test.docx');
+
+function isLibreOfficeAvailable() {
+  try {
+    execSync('which soffice', { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const testIfLO = isLibreOfficeAvailable() ? test : test.skip;
 
 describe('POST /api/convert-docx', () => {
   test('400 when no file is attached', async () => {
@@ -14,7 +26,7 @@ describe('POST /api/convert-docx', () => {
     expect(res.body.ok).toBe(false);
   });
 
-  test('converts DOCX fixture to PDF', async () => {
+  testIfLO('converts DOCX fixture to PDF', async () => {
     const res = await request(app)
       .post('/api/convert-docx')
       .attach('file', FIXTURE_DOCX);

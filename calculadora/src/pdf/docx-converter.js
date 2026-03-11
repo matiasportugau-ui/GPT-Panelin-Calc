@@ -17,15 +17,30 @@ async function convertDocxToPdf(docxBuffer, outputFormat = '.pdf') {
   // Validate DOCX magic bytes (DOCX is a ZIP file starting with PK\x03\x04)
   if (docxBuffer[0] !== 0x50 || docxBuffer[1] !== 0x4B ||
       docxBuffer[2] !== 0x03 || docxBuffer[3] !== 0x04) {
-    throw new Error('El archivo no es un DOCX válido.');
+    const err = new Error('El archivo no es un DOCX válido.');
+    err.code = 'INVALID_DOCX';
+    throw err;
   }
 
   try {
     const pdfBuffer = await libre.convert(docxBuffer, outputFormat, undefined);
     return pdfBuffer;
   } catch (err) {
-    throw new Error('Error al convertir DOCX a PDF: ' + err.message);
+    throw new Error('Error al convertir DOCX a PDF', { cause: err });
   }
+}
+
+/**
+ * Sanitizes a filename base to make it safe for use in headers and file systems.
+ * @param {string} name
+ * @returns {string}
+ */
+function sanitizeFilenameBase(name) {
+  if (typeof name !== 'string') return '';
+  let cleaned = name.replace(/[\x00-\x1F\x7F]/g, '');
+  cleaned = cleaned.replace(/[\\\/"'<>|:?*]/g, '_');
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned;
 }
 
 /**
@@ -34,8 +49,15 @@ async function convertDocxToPdf(docxBuffer, outputFormat = '.pdf') {
  * @returns {string} e.g. "BMC-COT-2026-0001.pdf"
  */
 function derivePdfFilename(originalName) {
-  const ext = path.extname(originalName);
-  const base = path.basename(originalName, ext);
+  let base = '';
+  if (typeof originalName === 'string' && originalName.trim() !== '') {
+    const ext = path.extname(originalName);
+    base = path.basename(originalName, ext);
+  }
+  base = sanitizeFilenameBase(base);
+  if (!base) {
+    base = 'converted';
+  }
   return `${base}.pdf`;
 }
 
