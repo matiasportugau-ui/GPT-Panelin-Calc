@@ -108,6 +108,7 @@ Ver `docs/DEPLOYMENT.md` para instrucciones de configuración del GPT Action.
 - [BMC-006 Dashboard gerencial minimo (setup)](docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md)
 - [BMC-007 Correlativo robusto con lock (setup)](docs/BMC_URUGUAY_BMC007_CORRELATIVO_SETUP.md)
 - [BMC-008 Carpetas Drive y LINK_CARPETA (setup)](docs/BMC_URUGUAY_BMC008_DRIVE_FOLDERS_SETUP.md)
+- [BMC-009 Editable por cotizacion y LINK_EDITABLE (setup)](docs/BMC_URUGUAY_BMC009_EDITABLE_SETUP.md)
 - [Integración completa](docs/INTEGRATION.md)
 - [Arquitectura v4.0](docs/ARCHITECTURE.md)
 - [Migración desde v3](docs/MIGRATION_FROM_V3.md)

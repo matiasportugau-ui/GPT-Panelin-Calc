@@ -30,9 +30,16 @@ Para carpetas de Drive:
 - `BMC Tracker -> Crear carpeta para fila actual`
 - `BMC Tracker -> Completar carpetas faltantes`
 
+Para editable:
+
+- `BMC Tracker -> Configurar plantilla editable (ID)`
+- `BMC Tracker -> Crear editable para fila actual`
+- `BMC Tracker -> Completar editables faltantes`
+
 Para detalle completo, ver:
 
 - `docs/BMC_URUGUAY_BMC005_TRACKER_SETUP.md`
 - `docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md`
 - `docs/BMC_URUGUAY_BMC007_CORRELATIVO_SETUP.md`
 - `docs/BMC_URUGUAY_BMC008_DRIVE_FOLDERS_SETUP.md`
+- `docs/BMC_URUGUAY_BMC009_EDITABLE_SETUP.md`

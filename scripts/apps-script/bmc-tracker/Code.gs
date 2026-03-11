@@ -6,6 +6,7 @@ const MAX_ROWS = 2000;
 const QUOTE_SEQ_PROP_PREFIX = "BMC_QUOTE_SEQ_";
 const DRIVE_ROOT_FOLDER_ID_PROP = "BMC_DRIVE_ROOT_FOLDER_ID";
 const DRIVE_QUOTES_ROOT_NAME = "Cotizaciones";
+const EDITABLE_TEMPLATE_FILE_ID_PROP = "BMC_EDITABLE_TEMPLATE_FILE_ID";
 
 const HEADERS = [
   "Fecha",
@@ -78,6 +79,11 @@ function onOpen() {
     .addItem("Ver carpeta raiz Drive", "showDriveRootFolderStatus")
     .addItem("Crear carpeta para fila actual", "createDriveFolderForActiveRow")
     .addItem("Completar carpetas faltantes", "createDriveFoldersForPendingRows")
+    .addSeparator()
+    .addItem("Configurar plantilla editable (ID)", "promptEditableTemplateFileId")
+    .addItem("Ver plantilla editable", "showEditableTemplateStatus")
+    .addItem("Crear editable para fila actual", "createEditableForActiveRow")
+    .addItem("Completar editables faltantes", "createEditablesForPendingRows")
     .addToUi();
 }
 
@@ -207,6 +213,13 @@ function autoSetStatusDerivedFields(sheet, row) {
         ensureDriveFolderLinkForRow_(sheet, row);
       } catch (err) {
         Logger.log("No se pudo crear carpeta automaticamente en fila %s: %s", row, err);
+      }
+    }
+    if (hasEditableTemplateConfigured_() && hasDriveRootConfigured_()) {
+      try {
+        ensureEditableLinkForRow_(sheet, row);
+      } catch (err) {
+        Logger.log("No se pudo crear editable automaticamente en fila %s: %s", row, err);
       }
     }
   }
@@ -414,6 +427,112 @@ function createDriveFoldersForPendingRows() {
   SpreadsheetApp.getUi().alert("Procesadas carpetas: " + String(createdOrLinked));
 }
 
+function promptEditableTemplateFileId() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    "Configurar plantilla editable",
+    "Ingresa el ID del archivo plantilla editable (Google Sheets o archivo Drive).",
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+  const fileId = String(response.getResponseText() || "").trim();
+  if (!fileId) {
+    throw new Error("Debes ingresar un ID de archivo valido.");
+  }
+  setEditableTemplateFileId(fileId);
+  showEditableTemplateStatus();
+}
+
+function setEditableTemplateFileId(fileId) {
+  const file = DriveApp.getFileById(fileId);
+  if (!file) {
+    throw new Error("No se pudo acceder al archivo plantilla.");
+  }
+  PropertiesService.getScriptProperties().setProperty(EDITABLE_TEMPLATE_FILE_ID_PROP, fileId);
+}
+
+function showEditableTemplateStatus() {
+  const ui = SpreadsheetApp.getUi();
+  const fileId = PropertiesService.getScriptProperties().getProperty(EDITABLE_TEMPLATE_FILE_ID_PROP);
+  if (!fileId) {
+    ui.alert("No hay plantilla editable configurada.");
+    return;
+  }
+  const file = DriveApp.getFileById(fileId);
+  ui.alert("Plantilla editable configurada:\nNombre: " + file.getName() + "\nID: " + fileId);
+}
+
+function createEditableForActiveRow() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== SHEET_TRACKER) {
+    throw new Error("La hoja activa debe ser Tracker.");
+  }
+  if (!hasDriveRootConfigured_()) {
+    throw new Error("Configura primero la carpeta raiz Drive.");
+  }
+  if (!hasEditableTemplateConfigured_()) {
+    throw new Error("Configura primero la plantilla editable.");
+  }
+  const row = sheet.getActiveRange().getRow();
+  if (row < START_ROW) {
+    throw new Error("Selecciona una fila de datos valida (>= " + START_ROW + ").");
+  }
+
+  assignQuoteRefIfMissing_(sheet, row);
+  if (!sheet.getRange(row, 20).getValue()) {
+    sheet.getRange(row, 20).setValue(1);
+  }
+  const editableUrl = ensureEditableLinkForRow_(sheet, row);
+  sheet.getRange(row, 34).setValue(new Date());
+  SpreadsheetApp.getUi().alert("Editable creado/vinculado en fila " + row + ":\n" + editableUrl);
+}
+
+function createEditablesForPendingRows() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_TRACKER);
+  if (!sheet) {
+    throw new Error("No existe hoja Tracker.");
+  }
+  if (!hasDriveRootConfigured_()) {
+    throw new Error("Configura primero la carpeta raiz Drive.");
+  }
+  if (!hasEditableTemplateConfigured_()) {
+    throw new Error("Configura primero la plantilla editable.");
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < START_ROW) {
+    SpreadsheetApp.getUi().alert("No hay filas para procesar.");
+    return;
+  }
+
+  let processed = 0;
+  for (let row = START_ROW; row <= lastRow; row += 1) {
+    const cliente = String(sheet.getRange(row, 2).getValue() || "").trim();
+    if (!cliente) {
+      continue;
+    }
+    const estado = String(sheet.getRange(row, 13).getValue() || "").trim();
+    if (estado !== "Emitida" && estado !== "Enviada") {
+      continue;
+    }
+    const current = String(sheet.getRange(row, 25).getValue() || "").trim();
+    if (current) {
+      continue;
+    }
+    assignQuoteRefIfMissing_(sheet, row);
+    if (!sheet.getRange(row, 20).getValue()) {
+      sheet.getRange(row, 20).setValue(1);
+    }
+    ensureEditableLinkForRow_(sheet, row);
+    sheet.getRange(row, 34).setValue(new Date());
+    processed += 1;
+  }
+
+  SpreadsheetApp.getUi().alert("Editables procesados: " + String(processed));
+}
+
 function ensureDriveFolderLinkForRow_(sheet, row) {
   const linkCell = sheet.getRange(row, 27);
   const current = String(linkCell.getValue() || "").trim();
@@ -463,6 +582,51 @@ function getDriveRootFolder_() {
 
 function hasDriveRootConfigured_() {
   return Boolean(PropertiesService.getScriptProperties().getProperty(DRIVE_ROOT_FOLDER_ID_PROP));
+}
+
+function hasEditableTemplateConfigured_() {
+  return Boolean(PropertiesService.getScriptProperties().getProperty(EDITABLE_TEMPLATE_FILE_ID_PROP));
+}
+
+function ensureEditableLinkForRow_(sheet, row) {
+  const linkCell = sheet.getRange(row, 25);
+  const current = String(linkCell.getValue() || "").trim();
+  if (current) {
+    return current;
+  }
+
+  const folderUrl = ensureDriveFolderLinkForRow_(sheet, row);
+  const folder = DriveApp.getFolderById(extractDriveIdFromUrl_(folderUrl));
+  const templateId = PropertiesService.getScriptProperties().getProperty(EDITABLE_TEMPLATE_FILE_ID_PROP);
+  if (!templateId) {
+    throw new Error("No hay plantilla editable configurada.");
+  }
+
+  const templateFile = DriveApp.getFileById(templateId);
+  const quoteRef = String(sheet.getRange(row, 19).getValue() || "").trim();
+  const version = Number(sheet.getRange(row, 20).getValue() || 1);
+  const clientSlug = slugifyClientName_(sheet.getRange(row, 2).getValue());
+  const fileName = quoteRef + "-V" + String(version) + "_" + clientSlug + "_EDITABLE";
+
+  const existing = findFileInFolderByName_(folder, fileName);
+  const file = existing || templateFile.makeCopy(fileName, folder);
+  const url = file.getUrl();
+  linkCell.setValue(url);
+  return url;
+}
+
+function findFileInFolderByName_(folder, filename) {
+  const files = folder.getFilesByName(filename);
+  return files.hasNext() ? files.next() : null;
+}
+
+function extractDriveIdFromUrl_(url) {
+  const value = String(url || "");
+  const idMatch = value.match(/[-\w]{25,}/);
+  if (!idMatch) {
+    throw new Error("No se pudo extraer ID de Drive desde URL: " + value);
+  }
+  return idMatch[0];
 }
 
 function getOrCreateChildFolder_(parentFolder, folderName) {

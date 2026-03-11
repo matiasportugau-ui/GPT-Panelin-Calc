@@ -11,6 +11,7 @@ Owner objetivo: A2 Apps Script
 - Dashboard minimo: `docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md`
 - Correlativo robusto: `docs/BMC_URUGUAY_BMC007_CORRELATIVO_SETUP.md`
 - Carpetas Drive y LINK_CARPETA: `docs/BMC_URUGUAY_BMC008_DRIVE_FOLDERS_SETUP.md`
+- Editables por cotizacion y LINK_EDITABLE: `docs/BMC_URUGUAY_BMC009_EDITABLE_SETUP.md`
 
 ## 2) Que hace este paquete
 
@@ -33,6 +34,7 @@ Al ejecutar `setupBmcTracker()`:
 7. Crea hoja `Dashboard` con KPIs minimos y tablas de resumen.
 8. Implementa correlativo anual con lock para `REF_COTIZACION`.
 9. Crea carpeta Drive por cotizacion y escribe `LINK_CARPETA`.
+10. Clona editable por version y escribe `LINK_EDITABLE`.
 
 ## 3) Como instalar en Google Sheets
 
@@ -56,6 +58,8 @@ Al ejecutar `setupBmcTracker()`:
 - `showSequenceStatus()`: muestra secuencia del anio actual.
 - `createDriveFolderForActiveRow()`: crea carpeta para la fila activa.
 - `createDriveFoldersForPendingRows()`: completa carpetas faltantes en lote.
+- `createEditableForActiveRow()`: crea editable para la fila activa.
+- `createEditablesForPendingRows()`: completa editables faltantes en lote.
 
 ## 5) Validaciones incluidas
 
@@ -77,12 +81,12 @@ Se considera cumplido si:
 5. Existe dashboard con KPIs base conectados a Tracker.
 6. La referencia de cotizacion se genera de forma unica y correlativa.
 7. Las filas emitidas/enviadas pueden resolver `LINK_CARPETA` automaticamente.
+8. Las filas emitidas/enviadas pueden resolver `LINK_EDITABLE` automaticamente.
 
 ## 7) Limites de esta entrega (intencionales)
 
 Esta base NO incluye aun:
 
-- clonado de editable (`BMC-009`)
 - integracion con `pdf_generator.py` (`BMC-010`)
 - linkeo automatico de PDF (`BMC-011`)
 
