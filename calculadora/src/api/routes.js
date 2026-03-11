@@ -1,10 +1,24 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const { generarCotizacion } = require('../engines/bom');
 const { tablaAutoportancia, validarAutoportancia } = require('../engines/autoportancia');
 const { listFamilies } = require('../data/catalog');
 const { generarPDF } = require('../pdf/generator');
+const {
+  calculateFromInput,
+  issueQuote,
+  patchQuoteStatus,
+  getClientHistory,
+  getQuoteVersionFile,
+  getQuoteFolderPath,
+} = require('../quotes/service');
+const { buildAutomationPrompt } = require('../ai/prompt');
+const { parseJsonBlock } = require('../ai/parser');
+const { runProviderCompletion, resolveProviderConfig } = require('../ai/providers');
+const { executeAutomationFromParsed } = require('../ai/automation');
 
 const router = express.Router();
 
@@ -191,6 +205,175 @@ router.post('/api/pdf', async (req, res) => {
     res.send(pdfBuffer);
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/quotes/calculate
+router.post('/api/quotes/calculate', (req, res) => {
+  try {
+    const client = req.body.client || {};
+    const technicalInput = req.body.technical_input || req.body;
+    const calculationResult = calculateFromInput({ technical_input: technicalInput, client });
+    res.json({
+      ok: true,
+      client,
+      technical_input: technicalInput,
+      calculation_result: calculationResult,
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/quotes/issue
+router.post('/api/quotes/issue', async (req, res) => {
+  try {
+    const body = req.body || {};
+    if (!body.client || !body.client.nombre) {
+      return res.status(400).json({ ok: false, error: 'client.nombre es requerido' });
+    }
+    const response = await issueQuote(body);
+    res.json({ ok: true, ...response });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// PATCH /api/quotes/:id/status
+router.patch('/api/quotes/:id/status', (req, res) => {
+  try {
+    const status = req.body?.status;
+    if (!status) {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: status' });
+    }
+    const quote = patchQuoteStatus(req.params.id, status);
+    res.json({
+      ok: true,
+      quote_id: quote.quote_id,
+      quote_ref: quote.quote_ref,
+      estado_cotizacion: quote.estado_cotizacion,
+      updated_at: quote.updated_at,
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/clients/:id/history
+router.get('/api/clients/:id/history', (req, res) => {
+  try {
+    const history = getClientHistory(req.params.id);
+    if (!history) {
+      return res.status(404).json({ ok: false, error: 'Cliente no encontrado' });
+    }
+    res.json({ ok: true, ...history });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/quotes/:quoteRef/versions/:version/pdf
+router.get('/api/quotes/:quoteRef/versions/:version/pdf', (req, res) => {
+  try {
+    const filePath = getQuoteVersionFile(req.params.quoteRef, Number(req.params.version), 'pdf');
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ ok: false, error: 'PDF no encontrado' });
+    }
+    const filename = path.basename(filePath);
+    res.set({
+      'Content-Type': 'application/pdf',
+      'Content-Disposition': `attachment; filename="${filename}"`,
+    });
+    fs.createReadStream(filePath).pipe(res);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/quotes/:quoteRef/versions/:version/payload
+router.get('/api/quotes/:quoteRef/versions/:version/payload', (req, res) => {
+  try {
+    const filePath = getQuoteVersionFile(req.params.quoteRef, Number(req.params.version), 'payload');
+    if (!filePath || !fs.existsSync(filePath)) {
+      return res.status(404).json({ ok: false, error: 'Payload no encontrado' });
+    }
+    const payload = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    res.json({ ok: true, payload });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/quotes/:quoteRef/folder
+router.get('/api/quotes/:quoteRef/folder', (req, res) => {
+  try {
+    const folderPath = getQuoteFolderPath(req.params.quoteRef);
+    if (!folderPath || !fs.existsSync(folderPath)) {
+      return res.status(404).json({ ok: false, error: 'Carpeta no encontrada' });
+    }
+    res.json({ ok: true, folder_path: folderPath });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message });
+  }
+});
+
+// GET /api/ai/prompt?provider=openai
+router.get('/api/ai/prompt', (req, res) => {
+  try {
+    const provider = req.query.provider || 'openai';
+    const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+    const prompt = buildAutomationPrompt({ provider, apiBaseUrl });
+    const providerConfig = resolveProviderConfig(provider);
+    res.json({
+      ok: true,
+      provider: providerConfig.provider,
+      model: providerConfig.model,
+      prompt,
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
+  }
+});
+
+// POST /api/ai/automate
+router.post('/api/ai/automate', async (req, res) => {
+  try {
+    const provider = req.body.provider || 'openai';
+    const userMessage = String(req.body.user_message || '').trim();
+    const autoExecute = req.body.auto_execute !== false;
+    const context = req.body.context || {};
+
+    if (!userMessage) {
+      return res.status(400).json({ ok: false, error: 'Campo requerido: user_message' });
+    }
+
+    const apiBaseUrl = `${req.protocol}://${req.get('host')}`;
+    const systemPrompt = buildAutomationPrompt({ provider, apiBaseUrl });
+    const llm = await runProviderCompletion({
+      provider,
+      systemPrompt,
+      userMessage: `${userMessage}\n\nContext:\n${JSON.stringify(context, null, 2)}`,
+    });
+
+    const parsed = parseJsonBlock(llm.content);
+    let execution = null;
+    if (autoExecute && parsed) {
+      execution = await executeAutomationFromParsed(parsed, {
+        ...context,
+        issued_by: req.body.issued_by || 'ai-automation-endpoint',
+      });
+    }
+
+    res.json({
+      ok: true,
+      provider: llm.provider,
+      model: llm.model,
+      ai_text: llm.content,
+      parsed_output: parsed,
+      execution,
+    });
+  } catch (err) {
+    res.status(400).json({ ok: false, error: err.message });
   }
 });
 
