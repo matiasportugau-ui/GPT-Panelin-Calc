@@ -4,6 +4,8 @@ const SHEET_DASHBOARD = "Dashboard";
 const START_ROW = 2;
 const MAX_ROWS = 2000;
 const QUOTE_SEQ_PROP_PREFIX = "BMC_QUOTE_SEQ_";
+const DRIVE_ROOT_FOLDER_ID_PROP = "BMC_DRIVE_ROOT_FOLDER_ID";
+const DRIVE_QUOTES_ROOT_NAME = "Cotizaciones";
 
 const HEADERS = [
   "Fecha",
@@ -71,6 +73,11 @@ function onOpen() {
     .addItem("Recrear dashboard", "setupBmcDashboard")
     .addItem("Asignar REF a fila actual", "assignQuoteRefToActiveRow")
     .addItem("Ver secuencia actual", "showSequenceStatus")
+    .addSeparator()
+    .addItem("Configurar carpeta raiz Drive (ID)", "promptDriveRootFolderId")
+    .addItem("Ver carpeta raiz Drive", "showDriveRootFolderStatus")
+    .addItem("Crear carpeta para fila actual", "createDriveFolderForActiveRow")
+    .addItem("Completar carpetas faltantes", "createDriveFoldersForPendingRows")
     .addToUi();
 }
 
@@ -195,6 +202,13 @@ function autoSetStatusDerivedFields(sheet, row) {
     if (!fechaEmisionCell.getValue()) {
       fechaEmisionCell.setValue(new Date());
     }
+    if (hasDriveRootConfigured_()) {
+      try {
+        ensureDriveFolderLinkForRow_(sheet, row);
+      } catch (err) {
+        Logger.log("No se pudo crear carpeta automaticamente en fila %s: %s", row, err);
+      }
+    }
   }
 
   if (quoteRefCell.getValue() && !versionCell.getValue()) {
@@ -298,6 +312,214 @@ function setSequenceForYear(year, value) {
     throw new Error("Valor de secuencia invalido.");
   }
   PropertiesService.getScriptProperties().setProperty(getSequenceKey_(y), String(v));
+}
+
+function promptDriveRootFolderId() {
+  const ui = SpreadsheetApp.getUi();
+  const response = ui.prompt(
+    "Configurar carpeta raiz de Drive",
+    "Ingresa el ID de la carpeta raiz de BMC Uruguay (no URL completa).",
+    ui.ButtonSet.OK_CANCEL
+  );
+  if (response.getSelectedButton() !== ui.Button.OK) {
+    return;
+  }
+
+  const folderId = String(response.getResponseText() || "").trim();
+  if (!folderId) {
+    throw new Error("Debes ingresar un ID de carpeta valido.");
+  }
+
+  setDriveRootFolderId(folderId);
+  showDriveRootFolderStatus();
+}
+
+function setDriveRootFolderId(folderId) {
+  const root = DriveApp.getFolderById(folderId);
+  if (!root) {
+    throw new Error("No se pudo acceder a la carpeta raiz.");
+  }
+  PropertiesService.getScriptProperties().setProperty(DRIVE_ROOT_FOLDER_ID_PROP, folderId);
+}
+
+function showDriveRootFolderStatus() {
+  const ui = SpreadsheetApp.getUi();
+  const folderId = PropertiesService.getScriptProperties().getProperty(DRIVE_ROOT_FOLDER_ID_PROP);
+  if (!folderId) {
+    ui.alert("No hay carpeta raiz configurada. Usa 'Configurar carpeta raiz Drive (ID)'.");
+    return;
+  }
+  const folder = DriveApp.getFolderById(folderId);
+  ui.alert("Carpeta raiz configurada:\nNombre: " + folder.getName() + "\nID: " + folderId);
+}
+
+function createDriveFolderForActiveRow() {
+  const sheet = SpreadsheetApp.getActiveSheet();
+  if (sheet.getName() !== SHEET_TRACKER) {
+    throw new Error("La hoja activa debe ser Tracker.");
+  }
+  if (!hasDriveRootConfigured_()) {
+    throw new Error("Configura primero la carpeta raiz Drive desde el menu BMC Tracker.");
+  }
+
+  const row = sheet.getActiveRange().getRow();
+  if (row < START_ROW) {
+    throw new Error("Selecciona una fila de datos valida (>= " + START_ROW + ").");
+  }
+
+  assignQuoteRefIfMissing_(sheet, row);
+  const url = ensureDriveFolderLinkForRow_(sheet, row);
+  sheet.getRange(row, 34).setValue(new Date());
+  SpreadsheetApp.getUi().alert("Carpeta creada/vinculada en fila " + row + ":\n" + url);
+}
+
+function createDriveFoldersForPendingRows() {
+  const sheet = SpreadsheetApp.getActive().getSheetByName(SHEET_TRACKER);
+  if (!sheet) {
+    throw new Error("No existe hoja Tracker.");
+  }
+  if (!hasDriveRootConfigured_()) {
+    throw new Error("Configura primero la carpeta raiz Drive desde el menu BMC Tracker.");
+  }
+
+  const lastRow = sheet.getLastRow();
+  if (lastRow < START_ROW) {
+    SpreadsheetApp.getUi().alert("No hay filas para procesar.");
+    return;
+  }
+
+  let createdOrLinked = 0;
+  for (let row = START_ROW; row <= lastRow; row += 1) {
+    const cliente = String(sheet.getRange(row, 2).getValue() || "").trim();
+    if (!cliente) {
+      continue;
+    }
+
+    const estado = String(sheet.getRange(row, 13).getValue() || "").trim();
+    if (estado !== "Emitida" && estado !== "Enviada") {
+      continue;
+    }
+
+    const currentLink = String(sheet.getRange(row, 27).getValue() || "").trim();
+    if (currentLink) {
+      continue;
+    }
+
+    assignQuoteRefIfMissing_(sheet, row);
+    ensureDriveFolderLinkForRow_(sheet, row);
+    sheet.getRange(row, 34).setValue(new Date());
+    createdOrLinked += 1;
+  }
+
+  SpreadsheetApp.getUi().alert("Procesadas carpetas: " + String(createdOrLinked));
+}
+
+function ensureDriveFolderLinkForRow_(sheet, row) {
+  const linkCell = sheet.getRange(row, 27);
+  const current = String(linkCell.getValue() || "").trim();
+  if (current) {
+    return current;
+  }
+
+  const quoteRef = String(sheet.getRange(row, 19).getValue() || "").trim();
+  if (!quoteRef) {
+    throw new Error("La fila " + row + " no tiene REF_COTIZACION.");
+  }
+
+  const clientName = String(sheet.getRange(row, 2).getValue() || "").trim();
+  const clientSlug = slugifyClientName_(clientName);
+
+  const emision = sheet.getRange(row, 21).getValue();
+  const ingreso = sheet.getRange(row, 1).getValue();
+  const baseDate = coerceToDate_(emision) || coerceToDate_(ingreso) || new Date();
+
+  const lock = LockService.getScriptLock();
+  lock.waitLock(30000);
+  try {
+    const root = getDriveRootFolder_();
+    const quotesRoot = getOrCreateChildFolder_(root, DRIVE_QUOTES_ROOT_NAME);
+    const yearFolder = getOrCreateChildFolder_(quotesRoot, String(baseDate.getFullYear()));
+    const monthFolder = getOrCreateChildFolder_(yearFolder, formatMonthFolderName_(baseDate));
+    const dayFolder = getOrCreateChildFolder_(monthFolder, formatDayFolderName_(baseDate));
+    const quoteFolderName = quoteRef + "_" + clientSlug;
+    const quoteFolder = getOrCreateChildFolder_(dayFolder, quoteFolderName);
+    const url = quoteFolder.getUrl();
+    linkCell.setValue(url);
+    return url;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function getDriveRootFolder_() {
+  const folderId = PropertiesService.getScriptProperties().getProperty(DRIVE_ROOT_FOLDER_ID_PROP);
+  if (!folderId) {
+    throw new Error(
+      "No hay carpeta raiz configurada. Usa menu: BMC Tracker -> Configurar carpeta raiz Drive (ID)."
+    );
+  }
+  return DriveApp.getFolderById(folderId);
+}
+
+function hasDriveRootConfigured_() {
+  return Boolean(PropertiesService.getScriptProperties().getProperty(DRIVE_ROOT_FOLDER_ID_PROP));
+}
+
+function getOrCreateChildFolder_(parentFolder, folderName) {
+  const existing = parentFolder.getFoldersByName(folderName);
+  if (existing.hasNext()) {
+    return existing.next();
+  }
+  return parentFolder.createFolder(folderName);
+}
+
+function formatMonthFolderName_(dateValue) {
+  const monthNames = [
+    "Enero",
+    "Febrero",
+    "Marzo",
+    "Abril",
+    "Mayo",
+    "Junio",
+    "Julio",
+    "Agosto",
+    "Septiembre",
+    "Octubre",
+    "Noviembre",
+    "Diciembre"
+  ];
+  const month = dateValue.getMonth();
+  const monthNum = String(month + 1).padStart(2, "0");
+  return monthNum + "-" + monthNames[month];
+}
+
+function formatDayFolderName_(dateValue) {
+  const tz = Session.getScriptTimeZone() || "America/Montevideo";
+  return Utilities.formatDate(dateValue, tz, "yyyy-MM-dd");
+}
+
+function coerceToDate_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return value;
+  }
+  if (!value) {
+    return null;
+  }
+  const parsed = new Date(value);
+  if (isNaN(parsed.getTime())) {
+    return null;
+  }
+  return parsed;
+}
+
+function slugifyClientName_(name) {
+  const safe = String(name || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-+/g, "-");
+  return safe || "Cliente";
 }
 
 function setupTrackerSheet(sheet) {

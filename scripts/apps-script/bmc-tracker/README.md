@@ -24,8 +24,15 @@ Para correlativo:
 - `BMC Tracker -> Asignar REF a fila actual`
 - `BMC Tracker -> Ver secuencia actual`
 
+Para carpetas de Drive:
+
+- `BMC Tracker -> Configurar carpeta raiz Drive (ID)`
+- `BMC Tracker -> Crear carpeta para fila actual`
+- `BMC Tracker -> Completar carpetas faltantes`
+
 Para detalle completo, ver:
 
 - `docs/BMC_URUGUAY_BMC005_TRACKER_SETUP.md`
 - `docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md`
 - `docs/BMC_URUGUAY_BMC007_CORRELATIVO_SETUP.md`
+- `docs/BMC_URUGUAY_BMC008_DRIVE_FOLDERS_SETUP.md`
