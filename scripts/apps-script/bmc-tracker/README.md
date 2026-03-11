@@ -15,6 +15,11 @@ Este modulo contiene el script base para BMC-005.
 4. Guardar y recargar la planilla.
 5. Ejecutar menu `BMC Tracker -> Inicializar estructura`.
 
+Si solo queres reconstruir el dashboard:
+
+- `BMC Tracker -> Recrear dashboard`
+
 Para detalle completo, ver:
 
 - `docs/BMC_URUGUAY_BMC005_TRACKER_SETUP.md`
+- `docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md`

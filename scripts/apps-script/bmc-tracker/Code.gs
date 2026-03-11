@@ -1,5 +1,6 @@
 const SHEET_TRACKER = "Tracker";
 const SHEET_CONFIG = "Config";
+const SHEET_DASHBOARD = "Dashboard";
 const START_ROW = 2;
 const MAX_ROWS = 2000;
 
@@ -66,6 +67,7 @@ function onOpen() {
     .addItem("Inicializar estructura", "setupBmcTracker")
     .addItem("Reaplicar validaciones", "applyBmcValidations")
     .addItem("Reaplicar formulas", "applyBmcFormulas")
+    .addItem("Recrear dashboard", "setupBmcDashboard")
     .addToUi();
 }
 
@@ -73,12 +75,19 @@ function setupBmcTracker() {
   const ss = SpreadsheetApp.getActive();
   const tracker = ensureSheet(ss, SHEET_TRACKER);
   const config = ensureSheet(ss, SHEET_CONFIG);
+  const dashboard = ensureSheet(ss, SHEET_DASHBOARD);
 
   setupConfigSheet(config);
   setupTrackerSheet(tracker);
   applyBmcValidations();
   applyBmcFormulas();
   applyTrackerFormatting(tracker);
+  setupDashboardSheet(dashboard);
+}
+
+function setupBmcDashboard() {
+  const sheet = ensureSheet(SpreadsheetApp.getActive(), SHEET_DASHBOARD);
+  setupDashboardSheet(sheet);
 }
 
 function applyBmcValidations() {
@@ -317,4 +326,121 @@ function ensureSheet(ss, name) {
     return existing;
   }
   return ss.insertSheet(name);
+}
+
+function setupDashboardSheet(sheet) {
+  sheet.clear();
+
+  sheet.getRange("A1:H1").merge();
+  sheet.getRange("A1").setValue("BMC Uruguay - Dashboard comercial");
+  sheet.getRange("A2:H2").merge();
+  sheet
+    .getRange("A2")
+    .setValue("KPIs minimos (BMC-006) conectados al Tracker");
+
+  const kpiHeaders = [
+    "Leads abiertos",
+    "Alta prioridad abiertas",
+    "Vencidos abiertos",
+    "Pendientes de cotizacion"
+  ];
+  sheet.getRange(4, 1, 1, 4).setValues([kpiHeaders]);
+  sheet
+    .getRange(5, 1)
+    .setFormula('=COUNTIFS(Tracker!AF2:AF,"Abierto",Tracker!B2:B,"<>")');
+  sheet
+    .getRange(5, 2)
+    .setFormula(
+      '=COUNTIFS(Tracker!L2:L,"Alta",Tracker!AF2:AF,"Abierto",Tracker!B2:B,"<>")'
+    );
+  sheet
+    .getRange(5, 3)
+    .setFormula(
+      '=COUNTIFS(Tracker!AC2:AC,"Si",Tracker!AF2:AF,"Abierto",Tracker!B2:B,"<>")'
+    );
+  sheet
+    .getRange(5, 4)
+    .setFormula(
+      '=COUNTIFS(Tracker!M2:M,"Borrador",Tracker!AF2:AF,"Abierto")+COUNTIFS(Tracker!M2:M,"Falta informacion",Tracker!AF2:AF,"Abierto")+COUNTIFS(Tracker!M2:M,"Calculada",Tracker!AF2:AF,"Abierto")+COUNTIFS(Tracker!M2:M,"Ajustando",Tracker!AF2:AF,"Abierto")'
+    );
+
+  sheet.getRange("A8:C8").setValues([["Responsable", "Abiertos", "Vencidos"]]);
+  for (let i = 0; i < LISTS.responsable.length; i += 1) {
+    const row = 9 + i;
+    sheet.getRange(row, 1).setValue(LISTS.responsable[i]);
+    sheet
+      .getRange(row, 2)
+      .setFormula(
+        `=COUNTIFS(Tracker!N2:N,A${row},Tracker!AF2:AF,"Abierto",Tracker!B2:B,"<>")`
+      );
+    sheet
+      .getRange(row, 3)
+      .setFormula(
+        `=COUNTIFS(Tracker!N2:N,A${row},Tracker!AC2:AC,"Si",Tracker!AF2:AF,"Abierto",Tracker!B2:B,"<>")`
+      );
+  }
+
+  sheet.getRange("E8:F8").setValues([["Estado", "Cantidad"]]);
+  for (let i = 0; i < LISTS.estado.length; i += 1) {
+    const row = 9 + i;
+    sheet.getRange(row, 5).setValue(LISTS.estado[i]);
+    sheet
+      .getRange(row, 6)
+      .setFormula(`=COUNTIFS(Tracker!M2:M,E${row},Tracker!B2:B,"<>")`);
+  }
+
+  applyDashboardFormatting(sheet);
+}
+
+function applyDashboardFormatting(sheet) {
+  sheet.setColumnWidth(1, 220);
+  sheet.setColumnWidth(2, 160);
+  sheet.setColumnWidth(3, 130);
+  sheet.setColumnWidth(4, 210);
+  sheet.setColumnWidth(5, 170);
+  sheet.setColumnWidth(6, 120);
+  sheet.setColumnWidth(7, 60);
+  sheet.setColumnWidth(8, 60);
+
+  sheet.getRange("A1:H1").setBackground("#111827").setFontColor("#ffffff");
+  sheet.getRange("A1").setFontSize(13).setFontWeight("bold");
+  sheet.getRange("A2:H2").setBackground("#f3f4f6").setFontColor("#111827");
+  sheet.getRange("A2").setFontStyle("italic");
+
+  sheet
+    .getRange("A4:D4")
+    .setBackground("#111827")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold")
+    .setHorizontalAlignment("center");
+  sheet
+    .getRange("A5:D5")
+    .setBackground("#ecfeff")
+    .setFontWeight("bold")
+    .setHorizontalAlignment("center")
+    .setNumberFormat("0");
+
+  sheet
+    .getRange("A8:C8")
+    .setBackground("#111827")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold");
+  sheet
+    .getRange("E8:F8")
+    .setBackground("#111827")
+    .setFontColor("#ffffff")
+    .setFontWeight("bold");
+
+  const respRows = LISTS.responsable.length;
+  const stateRows = LISTS.estado.length;
+
+  sheet
+    .getRange(9, 1, respRows, 3)
+    .setBorder(true, true, true, true, true, true, "#d1d5db", SpreadsheetApp.BorderStyle.SOLID);
+  sheet
+    .getRange(9, 5, stateRows, 2)
+    .setBorder(true, true, true, true, true, true, "#d1d5db", SpreadsheetApp.BorderStyle.SOLID);
+
+  sheet.getRange("A1:F25").setVerticalAlignment("middle");
+  sheet.setFrozenRows(2);
 }

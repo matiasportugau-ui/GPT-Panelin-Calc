@@ -8,6 +8,7 @@ Owner objetivo: A2 Apps Script
 - Script principal: `scripts/apps-script/bmc-tracker/Code.gs`
 - Manifest: `scripts/apps-script/bmc-tracker/appsscript.json`
 - Columnas canonicas: `docs/BMC_URUGUAY_TRACKER_COLUMNS.md`
+- Dashboard minimo: `docs/BMC_URUGUAY_BMC006_DASHBOARD_SETUP.md`
 
 ## 2) Que hace este paquete
 
@@ -27,6 +28,7 @@ Al ejecutar `setupBmcTracker()`:
    - asignacion automatica simple de `Responsable` por `Origen`
    - seteo de `FECHA_EMISION` cuando estado pasa a `Enviada`
    - seteo de `RESULTADO_FINAL` segun estado final
+7. Crea hoja `Dashboard` con KPIs minimos y tablas de resumen.
 
 ## 3) Como instalar en Google Sheets
 
@@ -42,6 +44,7 @@ Al ejecutar `setupBmcTracker()`:
 ## 4) Funciones disponibles
 
 - `setupBmcTracker()`: crea estructura completa.
+- `setupBmcDashboard()`: recrea solo el dashboard.
 - `applyBmcValidations()`: reaplica validaciones.
 - `applyBmcFormulas()`: reaplica formulas.
 - `onEdit(e)`: automatizacion en cambios de fila.
@@ -63,6 +66,7 @@ Se considera cumplido si:
 2. Existen validaciones para estado, prioridad, responsable, origen y escenario.
 3. Se calcula score y semaforo automaticamente.
 4. Se registran `CREATED_AT`/`UPDATED_AT` al editar filas con cliente.
+5. Existe dashboard con KPIs base conectados a Tracker.
 
 ## 7) Limites de esta entrega (intencionales)
 
