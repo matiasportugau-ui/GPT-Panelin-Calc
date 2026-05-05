@@ -1,7 +1,25 @@
 'use strict';
 
+const fs = require('fs');
+const path = require('path');
 const request = require('supertest');
 const app = require('../src/api/server');
+
+describe('Vercel deployment config', () => {
+  test('function and rewrite targets point to existing files', () => {
+    const projectRoot = path.join(__dirname, '..');
+    const config = require('../vercel.json');
+
+    Object.keys(config.functions || {}).forEach((functionPath) => {
+      expect(fs.existsSync(path.join(projectRoot, functionPath))).toBe(true);
+    });
+
+    (config.rewrites || []).forEach((rewrite) => {
+      const destination = rewrite.destination.replace(/^\//, '');
+      expect(fs.existsSync(path.join(projectRoot, destination))).toBe(true);
+    });
+  });
+});
 
 describe('GET /health', () => {
   test('devuelve status ok', async () => {
