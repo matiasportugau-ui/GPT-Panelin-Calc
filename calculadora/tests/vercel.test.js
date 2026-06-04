@@ -29,7 +29,7 @@ describe('vercel.json', () => {
       const entrypoint = path.join(projectRoot, destination);
 
       expect(fs.existsSync(entrypoint)).toBe(true);
-      expect(config.functions).toHaveProperty(destination);
+      expect(Object.prototype.hasOwnProperty.call(config.functions, destination)).toBe(true);
     }
   });
 
