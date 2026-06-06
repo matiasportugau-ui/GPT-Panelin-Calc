@@ -8,6 +8,26 @@ const { ivaRate } = require('../data/catalog');
 
 const ESCENARIOS_VALIDOS = ['solo_techo', 'solo_fachada', 'techo_fachada', 'camara_frigorifica'];
 
+function roundMoney(value) {
+  return Math.round(value * 100) / 100;
+}
+
+function scaleParedSection(section, factor, tipo) {
+  return {
+    ...section,
+    tipo,
+    ancho_m: roundMoney(section.ancho_m * factor),
+    area_m2: roundMoney(section.area_m2 * factor),
+    cant_paneles: section.cant_paneles * factor,
+    items: section.items.map(item => ({
+      ...item,
+      cantidad: item.cantidad * factor,
+      subtotal: roundMoney(item.subtotal * factor),
+    })),
+    subtotal: roundMoney(section.subtotal * factor),
+  };
+}
+
 /**
  * Orquestador principal. Genera una cotización completa según el escenario.
  *
@@ -92,14 +112,13 @@ function generarCotizacion(params) {
     secciones.push(calcTechoCompleto(techoParams));
 
     const alto_m = 3; // fixed height for cold room
-    const paredFrontal = calcParedCompleto({
+    const paredFrontal = scaleParedSection(calcParedCompleto({
       ...paredParams,
       largo_m: alto_m,
-    });
-    paredFrontal.tipo = 'pared_frontal_posterior';
+    }), 2, 'pared_frontal_posterior');
     secciones.push(paredFrontal);
 
-    const paredLateral = calcParedCompleto({
+    const paredLateral = scaleParedSection(calcParedCompleto({
       familia,
       espesor_mm,
       ancho_m: largo_m,
@@ -108,8 +127,7 @@ function generarCotizacion(params) {
       num_aberturas: 0,
       estructura,
       lista_precios,
-    });
-    paredLateral.tipo = 'pared_lateral';
+    }), 2, 'pared_lateral');
     secciones.push(paredLateral);
   }
 

@@ -146,6 +146,12 @@ describe('POST /api/cotizar', () => {
     expect(tipos).toContain('techo');
     expect(tipos).toContain('pared_frontal_posterior');
     expect(tipos).toContain('pared_lateral');
+
+    const paredFrontalPosterior = res.body.cotizacion.secciones.find(s => s.tipo === 'pared_frontal_posterior');
+    const paredLateral = res.body.cotizacion.secciones.find(s => s.tipo === 'pared_lateral');
+    expect(paredFrontalPosterior.area_m2).toBeCloseTo(24, 2);
+    expect(paredLateral.area_m2).toBeCloseTo(36, 2);
+    expect(paredFrontalPosterior.area_m2 + paredLateral.area_m2).toBeCloseTo(60, 2);
   });
 
   test('cotización techo+fachada tiene 2 secciones', async () => {
