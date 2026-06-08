@@ -2,10 +2,17 @@
 
 const request = require('supertest');
 const app = require('../src/api/server');
+const vercelApp = require('../src/server');
 
 describe('GET /health', () => {
   test('devuelve status ok', async () => {
     const res = await request(app).get('/health');
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('ok');
+  });
+
+  test('devuelve status ok desde el entrypoint de Vercel', async () => {
+    const res = await request(vercelApp).get('/health');
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('ok');
   });
