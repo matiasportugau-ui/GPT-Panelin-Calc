@@ -9,7 +9,7 @@ describe('Vercel deployment config', () => {
     const configPath = path.join(projectRoot, 'vercel.json');
     const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
 
-    expect(config.functions).toHaveProperty('src/api/server.js');
+    expect(Object.prototype.hasOwnProperty.call(config.functions, 'src/api/server.js')).toBe(true);
     expect(fs.existsSync(path.join(projectRoot, 'src/api/server.js'))).toBe(true);
     expect(config.rewrites).toContainEqual({
       source: '/(.*)',
