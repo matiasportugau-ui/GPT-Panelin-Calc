@@ -12,7 +12,7 @@ describe('Vercel deployment config', () => {
     const absoluteEntrypoint = path.join(repoRoot, apiEntrypoint);
 
     expect(fs.existsSync(absoluteEntrypoint)).toBe(true);
-    expect(vercelConfig.functions).toHaveProperty(apiEntrypoint);
+    expect(Object.prototype.hasOwnProperty.call(vercelConfig.functions, apiEntrypoint)).toBe(true);
     expect(vercelConfig.functions[apiEntrypoint].includeFiles).toBe('src/data/catalog_real.csv');
     expect(vercelConfig.rewrites).toContainEqual({
       source: '/(.*)',
