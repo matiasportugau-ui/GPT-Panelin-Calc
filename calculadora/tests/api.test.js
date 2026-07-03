@@ -292,7 +292,7 @@ describe('POST /api/cotizar', () => {
 });
 
 describe('POST /api/pdf', () => {
-  const cotizacionData = {
+  const forgedCotizacionData = {
     cotizacion_id: 'test-uuid-1234',
     fecha: '2026-03-05',
     escenario: 'solo_techo',
@@ -324,26 +324,39 @@ describe('POST /api/pdf', () => {
     nota: 'Precios sin IVA. IVA 22% aplicado al total final.',
   };
 
-  test('genera PDF con status 200 y Content-Type application/pdf', async () => {
+  test('genera PDF desde cotizacion_id creado por /api/cotizar', async () => {
+    const cotizacionRes = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: 5,
+        largo_m: 11,
+      });
+    expect(cotizacionRes.status).toBe(200);
+
     const res = await request(app)
       .post('/api/pdf')
-      .send({ cotizacion_data: cotizacionData, cliente: { nombre: 'Test Cliente' } });
+      .send({
+        cotizacion_id: cotizacionRes.body.cotizacion.cotizacion_id,
+        cliente: { nombre: 'Test Cliente' },
+      });
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
     expect(parseInt(res.headers['content-length'])).toBeGreaterThan(0);
   });
 
-  test('genera PDF sin nota (fallback a string vacío)', async () => {
-    const sinNota = { ...cotizacionData };
-    delete sinNota.nota;
+  test('rechaza cotizacion_data para no emitir PDFs con totales enviados por el cliente', async () => {
     const res = await request(app)
       .post('/api/pdf')
-      .send({ cotizacion_data: sinNota });
-    expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toMatch(/application\/pdf/);
+      .send({ cotizacion_data: forgedCotizacionData });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/cotizacion_data/);
   });
 
-  test('400 cuando falta cotizacion_data', async () => {
+  test('400 cuando faltan datos para generar el PDF', async () => {
     const res = await request(app).post('/api/pdf').send({});
     expect(res.status).toBe(400);
     expect(res.body.ok).toBe(false);
