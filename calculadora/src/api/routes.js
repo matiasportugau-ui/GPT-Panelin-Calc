@@ -171,16 +171,18 @@ router.post('/api/cotizar', (req, res) => {
 
 // POST /api/pdf
 // Accepts EITHER:
-//   1. { cotizacion_data, cliente } - full cotizacion object
-//   2. { cotizacion_id, cliente }   - looks up from cache
-//   3. { escenario, familia, espesor_mm, ..., cliente } - generates then PDF
+//   1. { cotizacion_id, cliente }   - looks up from cache
+//   2. { escenario, familia, espesor_mm, ..., cliente } - generates then PDF
 router.post('/api/pdf', async (req, res) => {
   try {
     let cotizacion = null;
     const cliente = req.body.cliente || {};
 
     if (req.body.cotizacion_data) {
-      cotizacion = req.body.cotizacion_data;
+      return res.status(400).json({
+        ok: false,
+        error: 'cotizacion_data no se acepta desde clientes publicos. Envia cotizacion_id o parametros de cotizacion para recalcular.',
+      });
     } else if (req.body.cotizacion_id) {
       cotizacion = cotizacionCache.get(req.body.cotizacion_id);
       if (!cotizacion) {
@@ -234,7 +236,7 @@ router.post('/api/pdf', async (req, res) => {
     } else {
       return res.status(400).json({
         ok: false,
-        error: 'Envia cotizacion_id, cotizacion_data, o los parametros de cotizacion (escenario, familia, espesor_mm, ancho_m o cant_paneles, largo_m).',
+        error: 'Envia cotizacion_id o los parametros de cotizacion (escenario, familia, espesor_mm, ancho_m o cant_paneles, largo_m).',
       });
     }
 
