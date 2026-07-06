@@ -16,7 +16,7 @@ describe('GPT PDF flow configuration', () => {
     expect(pdfFlow.regla_critica).toMatch(/NUNCA depender exclusivamente de cotizacion_id/);
     expect(pdfFlow.paso_2_con_data).toMatch(/cotizacion_data/);
     expect(validForms.split('\n')[0]).toMatch(/cotizacion_data/);
-    expect(validForms).toMatch(/cotizacion_id.*fallback cache/);
+    expect(validForms).toMatch(/fallback cache[\s\S]*cotizacion_id/);
 
     expect(actionSchema).toMatch(/1\. cotizacion_data completa/);
     expect(actionSchema).toMatch(/3\. cotizacion_id \(fallback cache in-memory/);
