@@ -177,11 +177,11 @@ components:
           type: boolean
         cotizacion:
           type: object
-          description: "Presentar TODOS estos campos al cliente. ⚠️ GUARDAR cotizacion_id — se necesita para /api/pdf."
+          description: "Presentar TODOS estos campos al cliente. ⚠️ GUARDAR el objeto cotizacion completo y los parámetros usados para /api/pdf."
           properties:
             cotizacion_id:
               type: string
-          description: "UUID único de esta cotización. Guardarlo como fallback, pero para PDF preferir el objeto cotizacion completo."
+              description: "UUID único de esta cotización. Guardarlo como fallback, pero para PDF preferir el objeto cotizacion completo."
             fecha:
               type: string
             escenario:
