@@ -324,26 +324,39 @@ describe('POST /api/pdf', () => {
     nota: 'Precios sin IVA. IVA 22% aplicado al total final.',
   };
 
-  test('genera PDF con status 200 y Content-Type application/pdf', async () => {
+  test('rechaza cotizacion_data enviada por clientes publicos', async () => {
     const res = await request(app)
       .post('/api/pdf')
       .send({ cotizacion_data: cotizacionData, cliente: { nombre: 'Test Cliente' } });
-    expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toMatch(/application\/pdf/);
-    expect(parseInt(res.headers['content-length'])).toBeGreaterThan(0);
+
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/cotizacion_data no se acepta/);
   });
 
-  test('genera PDF sin nota (fallback a string vacío)', async () => {
-    const sinNota = { ...cotizacionData };
-    delete sinNota.nota;
+  test('genera PDF desde cotizacion_id cacheado', async () => {
+    const quote = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: 5,
+        largo_m: 11,
+      });
+
     const res = await request(app)
       .post('/api/pdf')
-      .send({ cotizacion_data: sinNota });
+      .send({
+        cotizacion_id: quote.body.cotizacion.cotizacion_id,
+        cliente: { nombre: 'Test Cliente' },
+      });
+
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
   });
 
-  test('400 cuando falta cotizacion_data', async () => {
+  test('400 cuando falta una fuente de cotizacion para PDF', async () => {
     const res = await request(app).post('/api/pdf').send({});
     expect(res.status).toBe(400);
     expect(res.body.ok).toBe(false);
