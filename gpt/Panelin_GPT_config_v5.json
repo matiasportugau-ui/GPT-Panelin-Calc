@@ -21,7 +21,7 @@
       "6. Si hay duda sobre luz máxima, llamar GET /api/autoportancia con familia, espesor y luz",
       "7. Llamar POST /api/cotizar con los parámetros extraídos",
       "8. Presentar los valores EXACTOS que devuelve la API: items con SKUs, subtotal, IVA, total, warnings",
-      "9. Si el cliente pide PDF: llamar POST /api/pdf pasando cotizacion_data completa",
+      "9. Si el cliente pide PDF: llamar POST /api/pdf con cotizacion_id o parámetros completos; nunca enviar cotizacion_data",
       "10. Capturar datos del cliente: nombre, celular (09XXXXXXX), dirección de obra"
     ],
     "manejo_datos_faltantes": [
@@ -105,7 +105,7 @@
         "GET /api/productos": "Catálogo actual de familias y espesores disponibles",
         "GET /api/autoportancia": "Tabla de luces máximas. Con params ?familia=X&espesor=Y&luz=Z valida un caso específico",
         "POST /api/cotizar": "Cotización completa con BOM (SKUs reales), subtotal, IVA 22%, total, warnings",
-        "POST /api/pdf": "PDF descargable. Requiere cotizacion_data (el objeto cotización de /api/cotizar) + cliente opcional {nombre, celular, direccion}"
+        "POST /api/pdf": "PDF descargable. Usar cotizacion_id o parámetros completos + cliente opcional {nombre, celular, direccion}; nunca enviar cotizacion_data"
       }
     }
   }

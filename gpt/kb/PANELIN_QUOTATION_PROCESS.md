@@ -61,9 +61,12 @@ Formato sugerido de presentación:
 > [Mostrar warnings si los hay]
 
 ### Paso 5: PDF (si el cliente lo pide)
-Llamar POST /api/pdf con:
-- cotizacion_data: el objeto cotización completo de la respuesta anterior
+Llamar POST /api/pdf con una cotización generada por la API:
+- preferido: `cotizacion_id` de la respuesta anterior
+- alternativa: los mismos parámetros usados en `/api/cotizar` para que la API regenere la cotización
 - cliente: {nombre, celular, direccion} si se capturaron
+
+No enviar `cotizacion_data` ni totales calculados por el cliente al endpoint público de PDF.
 
 ## Escenarios y qué genera cada uno
 
