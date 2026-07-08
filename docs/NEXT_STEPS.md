@@ -53,7 +53,7 @@ curl -X POST http://localhost:3000/api/cotizar \
 # PDF de prueba
 curl -X POST http://localhost:3000/api/pdf \
   -H "Content-Type: application/json" \
-  -d '{"cotizacion_data": { ... }, "cliente": {"nombre":"Test"}}' \
+  -d '{"cotizacion_id": "uuid-devuelto-por-cotizar", "cliente": {"nombre":"Test"}}' \
   --output prueba.pdf
 ```
 
@@ -206,7 +206,7 @@ cd calculadora/ && vercel --prod
 | GPT no llama a la API | URL desactualizada en schema | Verificar `servers.url` en `gpt_action_schema.yaml` |
 | `400 Bad Request` en `/api/cotizar` | Parámetros faltantes o inválidos | Verificar que `escenario`, `familia`, `espesor_mm`, `ancho_m`, `largo_m` estén presentes y sean números > 0 |
 | Warning "luz supera máximo" | `largo_m` mayor que luz máxima para ese panel | Normal si hay apoyos intermedios: especificar `apoyos` en el request |
-| PDF vacío o error | `cotizacion_data` mal formado | Usar el objeto `cotizacion` directamente desde la respuesta de `/api/cotizar` |
+| PDF devuelve 404 | `cotizacion_id` expiró del cache en memoria | Regenerar la cotización con `/api/cotizar` y volver a pedir el PDF |
 | Tests fallan localmente | `node_modules` desactualizado | `cd calculadora && npm install` |
 
 ---
@@ -237,11 +237,11 @@ Para evolucionar el sistema con el menor riesgo posible, la recomendación es pr
   - tests que cubran familias con accesorios opcionales o no disponibles
 
 ### Prioridad 4 — Mejorar resiliencia de generación de PDF
-- Mantener la opción de `cotizacion_data` como camino principal y reducir la dependencia del cache en memoria para flujos críticos.
-- Objetivo: evitar errores por reinicios o expiración implícita en entornos serverless.
+- Mantener el PDF atado a cotizaciones generadas por la API y reducir la dependencia del cache en memoria para flujos críticos.
+- Objetivo: evitar errores por reinicios o expiración implícita en entornos serverless sin aceptar totales provistos por el cliente.
 - Entregable sugerido:
-  - documentar que `cotizacion_data` es la opción recomendada
-  - considerar persistencia externa solo si el negocio realmente necesita regeneración diferida por `cotizacion_id`
+  - documentar que `cotizacion_id` o parámetros completos son las opciones recomendadas
+  - considerar persistencia externa si el negocio necesita regeneración diferida por `cotizacion_id`
 
 ### Plan de implementación recomendado
 1. **Fase 1: validación**

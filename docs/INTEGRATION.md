@@ -45,7 +45,7 @@
        │  "Sí, mandame el PDF"      │                                 │
        │──────────────────────────→ │                                 │
        │                            │  POST /api/pdf                  │
-       │                            │  { cotizacion_data, cliente }   │
+       │                            │  { cotizacion_id, cliente }     │
        │                            │────────────────────────────────→│
        │                            │                                 │
        │                            │  Buffer PDF                     │
@@ -110,7 +110,7 @@ Genera PDF descargable de una cotización.
 **Request:**
 ```json
 {
-  "cotizacion_data": { /* objeto cotización */ },
+  "cotizacion_id": "uuid-...",
   "cliente": {
     "nombre": "Juan Pérez",
     "celular": "099123456",
@@ -118,6 +118,8 @@ Genera PDF descargable de una cotización.
   }
 }
 ```
+
+> También se pueden enviar los mismos parámetros de `/api/cotizar` para que la API regenere la cotización y el PDF. No enviar `cotizacion_data`: el endpoint público rechaza objetos de cotización con totales provistos por el cliente.
 
 **Response:** Binary PDF (application/pdf)
 
