@@ -97,7 +97,7 @@ function generarCotizacion(params) {
       largo_m: alto_m,
     });
     paredFrontal.tipo = 'pared_frontal_posterior';
-    secciones.push(paredFrontal);
+    secciones.push(multiplicarSeccion(paredFrontal, 2));
 
     const paredLateral = calcParedCompleto({
       familia,
@@ -110,7 +110,7 @@ function generarCotizacion(params) {
       lista_precios,
     });
     paredLateral.tipo = 'pared_lateral';
-    secciones.push(paredLateral);
+    secciones.push(multiplicarSeccion(paredLateral, 2));
   }
 
   const subtotal_sin_iva = secciones.reduce((acc, s) => acc + s.subtotal, 0);
@@ -141,6 +141,21 @@ function generarCotizacion(params) {
   }
 
   return cotizacion;
+}
+
+function multiplicarSeccion(seccion, cantidadParedes) {
+  return {
+    ...seccion,
+    cantidad_paredes: cantidadParedes,
+    area_m2: Math.round(seccion.area_m2 * cantidadParedes * 100) / 100,
+    cant_paneles: seccion.cant_paneles * cantidadParedes,
+    items: seccion.items.map(item => ({
+      ...item,
+      cantidad: item.cantidad * cantidadParedes,
+      subtotal: Math.round(item.subtotal * cantidadParedes * 100) / 100,
+    })),
+    subtotal: Math.round(seccion.subtotal * cantidadParedes * 100) / 100,
+  };
 }
 
 module.exports = { generarCotizacion };
