@@ -45,7 +45,7 @@
        │  "Sí, mandame el PDF"      │                                 │
        │──────────────────────────→ │                                 │
        │                            │  POST /api/pdf                  │
-       │                            │  { cotizacion_data, cliente }   │
+       │                            │  { cotizacion_id, cliente }     │
        │                            │────────────────────────────────→│
        │                            │                                 │
        │                            │  Buffer PDF                     │
@@ -110,7 +110,7 @@ Genera PDF descargable de una cotización.
 **Request:**
 ```json
 {
-  "cotizacion_data": { /* objeto cotización */ },
+  "cotizacion_id": "uuid-...",
   "cliente": {
     "nombre": "Juan Pérez",
     "celular": "099123456",
@@ -136,7 +136,7 @@ Valida la luz máxima para una combinación familia/espesor.
 | `solo_techo` | 1 sección techo |
 | `solo_fachada` | 1 sección pared |
 | `techo_fachada` | 2 secciones (techo + pared) |
-| `camara_frigorifica` | 3 secciones (techo + frontal/posterior + lateral) |
+| `camara_frigorifica` | 3 secciones (techo + 2 paredes frontal/posterior + 2 laterales) |
 
 ## Reglas de Negocio
 
