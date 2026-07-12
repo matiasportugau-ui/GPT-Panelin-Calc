@@ -97,6 +97,15 @@ function generarCotizacion(params) {
       largo_m: alto_m,
     });
     paredFrontal.tipo = 'pared_frontal_posterior';
+    paredFrontal.cantidad_paredes = 2;
+    paredFrontal.area_m2 *= 2;
+    paredFrontal.cant_paneles *= 2;
+    paredFrontal.items = paredFrontal.items.map(item => ({
+      ...item,
+      cantidad: item.cantidad * 2,
+      subtotal: item.subtotal * 2,
+    }));
+    paredFrontal.subtotal *= 2;
     secciones.push(paredFrontal);
 
     const paredLateral = calcParedCompleto({
@@ -110,6 +119,15 @@ function generarCotizacion(params) {
       lista_precios,
     });
     paredLateral.tipo = 'pared_lateral';
+    paredLateral.cantidad_paredes = 2;
+    paredLateral.area_m2 *= 2;
+    paredLateral.cant_paneles *= 2;
+    paredLateral.items = paredLateral.items.map(item => ({
+      ...item,
+      cantidad: item.cantidad * 2,
+      subtotal: item.subtotal * 2,
+    }));
+    paredLateral.subtotal *= 2;
     secciones.push(paredLateral);
   }
 

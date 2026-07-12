@@ -148,6 +148,31 @@ describe('POST /api/cotizar', () => {
     expect(tipos).toContain('pared_lateral');
   });
 
+  test('cámara frigorífica cobra las 4 paredes completas', async () => {
+    const res = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'camara_frigorifica',
+        familia: 'ISOFRIG_PIR',
+        espesor_mm: 80,
+        ancho_m: 4,
+        largo_m: 6,
+      });
+
+    expect(res.status).toBe(200);
+    const secciones = res.body.cotizacion.secciones;
+    const paredFrontal = secciones.find(s => s.tipo === 'pared_frontal_posterior');
+    const paredLateral = secciones.find(s => s.tipo === 'pared_lateral');
+
+    expect(paredFrontal.cantidad_paredes).toBe(2);
+    expect(paredFrontal.area_m2).toBe(24);
+    expect(paredFrontal.cant_paneles).toBe(8);
+    expect(paredLateral.cantidad_paredes).toBe(2);
+    expect(paredLateral.area_m2).toBe(36);
+    expect(paredLateral.cant_paneles).toBe(12);
+    expect(paredFrontal.area_m2 + paredLateral.area_m2).toBe(60);
+  });
+
   test('cotización techo+fachada tiene 2 secciones', async () => {
     const res = await request(app)
       .post('/api/cotizar')
@@ -292,61 +317,49 @@ describe('POST /api/cotizar', () => {
 });
 
 describe('POST /api/pdf', () => {
-  const cotizacionData = {
-    cotizacion_id: 'test-uuid-1234',
-    fecha: '2026-03-05',
-    escenario: 'solo_techo',
-    familia: 'ISODEC_EPS',
-    espesor_mm: 100,
-    lista_precios: 'venta',
-    secciones: [
-      {
-        tipo: 'techo',
+  test('rechaza cotizacion_data para impedir PDFs con totales forjados', async () => {
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        cotizacion_data: {
+          cotizacion_id: 'forged-quote',
+          resumen: { total_con_iva: 1.22, moneda: 'USD' },
+          secciones: [],
+        },
+        cliente: { nombre: 'Test Cliente' },
+      });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/cotizacion_data no es aceptado/);
+  });
+
+  test('400 cuando falta cotizacion_id o parámetros de cotización', async () => {
+    const res = await request(app).post('/api/pdf').send({});
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+  });
+
+  test('genera PDF desde cotizacion_id cacheado', async () => {
+    const cotizacion = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
         familia: 'ISODEC_EPS',
         espesor_mm: 100,
         ancho_m: 5,
         largo_m: 11,
-        area_m2: 55,
-        cant_paneles: 5,
-        items: [
-          { sku: 'ISODEC_EPS_100', descripcion: 'ISODEC EPS 100mm', cantidad: 5, unidad: 'panel', precio_unit: 308.00, subtotal: 1540.00 },
-        ],
-        subtotal: 1540.00,
-      },
-    ],
-    resumen: {
-      subtotal_sin_iva: 1540.00,
-      iva_22: 338.80,
-      total_con_iva: 1878.80,
-      moneda: 'USD',
-    },
-    warnings: [],
-    nota: 'Precios sin IVA. IVA 22% aplicado al total final.',
-  };
+      });
+    expect(cotizacion.status).toBe(200);
 
-  test('genera PDF con status 200 y Content-Type application/pdf', async () => {
     const res = await request(app)
       .post('/api/pdf')
-      .send({ cotizacion_data: cotizacionData, cliente: { nombre: 'Test Cliente' } });
+      .send({
+        cotizacion_id: cotizacion.body.cotizacion.cotizacion_id,
+        cliente: { nombre: 'Test Cliente PDF' },
+      });
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
     expect(parseInt(res.headers['content-length'])).toBeGreaterThan(0);
-  });
-
-  test('genera PDF sin nota (fallback a string vacío)', async () => {
-    const sinNota = { ...cotizacionData };
-    delete sinNota.nota;
-    const res = await request(app)
-      .post('/api/pdf')
-      .send({ cotizacion_data: sinNota });
-    expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toMatch(/application\/pdf/);
-  });
-
-  test('400 cuando falta cotizacion_data', async () => {
-    const res = await request(app).post('/api/pdf').send({});
-    expect(res.status).toBe(400);
-    expect(res.body.ok).toBe(false);
   });
 
   test('genera PDF desde parámetros directos (cant_paneles)', async () => {

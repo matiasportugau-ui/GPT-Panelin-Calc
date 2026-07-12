@@ -62,8 +62,11 @@ Formato sugerido de presentación:
 
 ### Paso 5: PDF (si el cliente lo pide)
 Llamar POST /api/pdf con:
-- cotizacion_data: el objeto cotización completo de la respuesta anterior
+- cotizacion_id: el UUID devuelto por POST /api/cotizar (forma preferida)
+- o los mismos parámetros completos de cotización para que el servidor recalcule
 - cliente: {nombre, celular, direccion} si se capturaron
+
+No enviar `cotizacion_data`: el servidor solo genera PDFs desde cotizaciones cacheadas o recalculadas.
 
 ## Escenarios y qué genera cada uno
 
