@@ -46,7 +46,7 @@ La API devuelve un JSON con esta estructura:
 - **secciones[]**: cada sección tiene tipo (techo/pared/pared_frontal_posterior/pared_lateral), items[] con descripción, cantidad, unidad, precio unitario y subtotal
 - **resumen**: subtotal_sin_iva, iva_22, total_con_iva, moneda
 - **warnings[]**: advertencias de autoportancia (mostrar SIEMPRE)
-- **envio_referencia_usd**: costo referencial de envío
+- **envio_usd**: solo aparece si se envió un valor de flete confirmado en la solicitud
 - **nota**: disclaimer estándar
 
 **REGLA ABSOLUTA: Presentar los valores EXACTOS de la API.**
@@ -57,13 +57,15 @@ Formato sugerido de presentación:
 > Subtotal sin IVA: USD [valor exacto de la API]
 > IVA 22%: USD [valor exacto de la API]
 > **Total: USD [valor exacto de la API]**
-> Envío referencia: USD [valor exacto de la API]
+> Envío: USD [solo si la API devuelve envio_usd]
 > [Mostrar warnings si los hay]
 
 ### Paso 5: PDF (si el cliente lo pide)
 Llamar POST /api/pdf con:
-- cotizacion_data: el objeto cotización completo de la respuesta anterior
+- cotizacion_id de la respuesta anterior, o los mismos parámetros completos de cotización para regenerar desde la API
 - cliente: {nombre, celular, direccion} si se capturaron
+
+NUNCA enviar cotizacion_data: la API rechaza objetos de cotización provistos por el cliente para evitar PDFs con precios forjados.
 
 ## Escenarios y qué genera cada uno
 
