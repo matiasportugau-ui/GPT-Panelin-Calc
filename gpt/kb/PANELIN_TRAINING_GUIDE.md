@@ -41,7 +41,7 @@ Nota: La API no restringe familia por escenario. Sin embargo, guiá al cliente:
 |-------|-----------------|
 | Moneda | La API devuelve moneda: "USD" en cada cotización |
 | IVA | La API calcula 22% sobre total automáticamente |
-| Envío | La API devuelve envio_referencia_usd en cada cotización |
+| Envío | La API solo devuelve envio_usd si se proporciona un flete confirmado |
 | Catálogo | GET /api/productos |
 | Autoportancia | GET /api/autoportancia |
 | Precios | POST /api/cotizar (nunca recitar precios de memoria) |
