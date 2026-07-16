@@ -130,7 +130,7 @@ describe('POST /api/cotizar', () => {
     expect(res.body.cotizacion.secciones[0].cant_paneles).toBe(10);
   });
 
-  test('cámara frigorífica tiene 3 secciones', async () => {
+  test('cámara frigorífica incluye techo y sus cuatro paredes', async () => {
     const res = await request(app)
       .post('/api/cotizar')
       .send({
@@ -146,6 +146,23 @@ describe('POST /api/cotizar', () => {
     expect(tipos).toContain('techo');
     expect(tipos).toContain('pared_frontal_posterior');
     expect(tipos).toContain('pared_lateral');
+
+    const paredes = res.body.cotizacion.secciones.filter(s => s.tipo !== 'techo');
+    expect(paredes.reduce((total, pared) => total + pared.area_m2, 0)).toBe(60);
+    expect(paredes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        tipo: 'pared_frontal_posterior',
+        cantidad_paredes: 2,
+        area_m2: 24,
+        cant_paneles: 8,
+      }),
+      expect.objectContaining({
+        tipo: 'pared_lateral',
+        cantidad_paredes: 2,
+        area_m2: 36,
+        cant_paneles: 12,
+      }),
+    ]));
   });
 
   test('cotización techo+fachada tiene 2 secciones', async () => {

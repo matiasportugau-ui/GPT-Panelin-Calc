@@ -8,6 +8,22 @@ const { ivaRate } = require('../data/catalog');
 
 const ESCENARIOS_VALIDOS = ['solo_techo', 'solo_fachada', 'techo_fachada', 'camara_frigorifica'];
 
+function agruparParedesIguales(pared, cantidad, tipo) {
+  return {
+    ...pared,
+    tipo,
+    cantidad_paredes: cantidad,
+    area_m2: Math.round(pared.area_m2 * cantidad * 100) / 100,
+    cant_paneles: pared.cant_paneles * cantidad,
+    items: pared.items.map(item => ({
+      ...item,
+      cantidad: item.cantidad * cantidad,
+      subtotal: Math.round(item.subtotal * cantidad * 100) / 100,
+    })),
+    subtotal: Math.round(pared.subtotal * cantidad * 100) / 100,
+  };
+}
+
 /**
  * Orquestador principal. Genera una cotización completa según el escenario.
  *
@@ -96,8 +112,7 @@ function generarCotizacion(params) {
       ...paredParams,
       largo_m: alto_m,
     });
-    paredFrontal.tipo = 'pared_frontal_posterior';
-    secciones.push(paredFrontal);
+    secciones.push(agruparParedesIguales(paredFrontal, 2, 'pared_frontal_posterior'));
 
     const paredLateral = calcParedCompleto({
       familia,
@@ -109,8 +124,7 @@ function generarCotizacion(params) {
       estructura,
       lista_precios,
     });
-    paredLateral.tipo = 'pared_lateral';
-    secciones.push(paredLateral);
+    secciones.push(agruparParedesIguales(paredLateral, 2, 'pared_lateral'));
   }
 
   const subtotal_sin_iva = secciones.reduce((acc, s) => acc + s.subtotal, 0);
