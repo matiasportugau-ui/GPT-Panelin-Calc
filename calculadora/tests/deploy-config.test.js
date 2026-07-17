@@ -16,7 +16,9 @@ describe('Vercel deployment configuration', () => {
   test('every rewrite destination points to a configured function', () => {
     for (const rewrite of vercelConfig.rewrites || []) {
       const destination = rewrite.destination.replace(/^\/+/, '');
-      expect(vercelConfig.functions).toHaveProperty(destination);
+      expect(
+        Object.prototype.hasOwnProperty.call(vercelConfig.functions, destination)
+      ).toBe(true);
     }
   });
 });
