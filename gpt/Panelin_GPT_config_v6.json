@@ -37,8 +37,7 @@
       "datos_cliente_pdf": "Antes de generar el PDF, preguntar al cliente: nombre, celular y dirección de obra. Si el cliente no quiere dar algún dato, generar el PDF sin ese campo.",
       "formas_validas_de_llamar_pdf": [
         "FORMA 1 (preferida): { cotizacion_id: 'uuid-de-cotizar', cliente: { nombre, celular, direccion } }",
-        "FORMA 2 (regenera): { escenario, familia, espesor_mm, ancho_m, largo_m, ..., cliente: { nombre, celular, direccion } }",
-        "FORMA 3 (datos completos): { cotizacion_data: { ...objeto completo de /api/cotizar... }, cliente: { nombre, celular, direccion } }"
+        "FORMA 2 (regenera): { escenario, familia, espesor_mm, ancho_m, largo_m, ..., cliente: { nombre, celular, direccion } }"
       ]
     },
 
@@ -152,7 +151,7 @@
         "GET /api/productos": "Catálogo actual de familias y espesores disponibles",
         "GET /api/autoportancia": "Tabla de luces máximas. Con params ?familia=X&espesor=Y&luz=Z valida un caso específico",
         "POST /api/cotizar": "Cotización completa con BOM (SKUs reales), subtotal, IVA 22%, total, warnings. GUARDAR cotizacion_id de la respuesta.",
-        "POST /api/pdf": "PDF descargable. Usar cotizacion_id (preferido), cotizacion_data completa, o parámetros de cotización + cliente {nombre, celular, direccion}"
+        "POST /api/pdf": "PDF descargable. Usar cotizacion_id (preferido) o parámetros de cotización + cliente {nombre, celular, direccion}. NUNCA enviar cotizacion_data."
       }
     }
   }

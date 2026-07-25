@@ -146,6 +146,17 @@ describe('POST /api/cotizar', () => {
     expect(tipos).toContain('techo');
     expect(tipos).toContain('pared_frontal_posterior');
     expect(tipos).toContain('pared_lateral');
+
+    const paredes = res.body.cotizacion.secciones.filter(s => s.tipo !== 'techo');
+    const areaParedes = paredes.reduce((acc, s) => acc + s.area_m2, 0);
+    expect(areaParedes).toBe(60);
+
+    const frontalPosterior = paredes.find(s => s.tipo === 'pared_frontal_posterior');
+    const lateral = paredes.find(s => s.tipo === 'pared_lateral');
+    expect(frontalPosterior.cantidad_paredes).toBe(2);
+    expect(frontalPosterior.cant_paneles).toBe(8);
+    expect(lateral.cantidad_paredes).toBe(2);
+    expect(lateral.cant_paneles).toBe(12);
   });
 
   test('cotización techo+fachada tiene 2 secciones', async () => {
@@ -324,26 +335,39 @@ describe('POST /api/pdf', () => {
     nota: 'Precios sin IVA. IVA 22% aplicado al total final.',
   };
 
-  test('genera PDF con status 200 y Content-Type application/pdf', async () => {
+  test('rechaza cotizacion_data para evitar PDFs con cotizaciones forjadas', async () => {
     const res = await request(app)
       .post('/api/pdf')
       .send({ cotizacion_data: cotizacionData, cliente: { nombre: 'Test Cliente' } });
+    expect(res.status).toBe(400);
+    expect(res.body.ok).toBe(false);
+    expect(res.body.error).toMatch(/cotizacion_data/);
+  });
+
+  test('genera PDF con cotizacion_id cacheado', async () => {
+    const quote = await request(app)
+      .post('/api/cotizar')
+      .send({
+        escenario: 'solo_techo',
+        familia: 'ISODEC_EPS',
+        espesor_mm: 100,
+        ancho_m: 5,
+        largo_m: 11,
+      });
+    expect(quote.status).toBe(200);
+
+    const res = await request(app)
+      .post('/api/pdf')
+      .send({
+        cotizacion_id: quote.body.cotizacion.cotizacion_id,
+        cliente: { nombre: 'Test Cliente' },
+      });
     expect(res.status).toBe(200);
     expect(res.headers['content-type']).toMatch(/application\/pdf/);
     expect(parseInt(res.headers['content-length'])).toBeGreaterThan(0);
   });
 
-  test('genera PDF sin nota (fallback a string vacío)', async () => {
-    const sinNota = { ...cotizacionData };
-    delete sinNota.nota;
-    const res = await request(app)
-      .post('/api/pdf')
-      .send({ cotizacion_data: sinNota });
-    expect(res.status).toBe(200);
-    expect(res.headers['content-type']).toMatch(/application\/pdf/);
-  });
-
-  test('400 cuando falta cotizacion_data', async () => {
+  test('400 cuando faltan datos de cotización', async () => {
     const res = await request(app).post('/api/pdf').send({});
     expect(res.status).toBe(400);
     expect(res.body.ok).toBe(false);
