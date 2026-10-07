@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://bmcuruguay.com/schemas/bmc_quote_calculation_request.schema.json",
+  "title": "BMC Quote Calculation Request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "client",
+    "technical_input"
+  ],
+  "properties": {
+    "client": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "nombre"
+      ],
+      "properties": {
+        "client_id": {
+          "type": "string",
+          "minLength": 3
+        },
+        "nombre": {
+          "type": "string",
+          "minLength": 2
+        },
+        "telefono": {
+          "type": "string"
+        }
+      }
+    },
+    "technical_input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "escenario",
+        "familia",
+        "espesor_mm",
+        "ancho_m",
+        "largo_m"
+      ],
+      "properties": {
+        "escenario": {
+          "type": "string",
+          "enum": [
+            "solo_techo",
+            "solo_fachada",
+            "techo_fachada",
+            "camara_frig"
+          ]
+        },
+        "familia": {
+          "type": "string",
+          "minLength": 2
+        },
+        "espesor_mm": {
+          "type": "integer",
+          "minimum": 20
+        },
+        "ancho_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "largo_m": {
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "cantidad": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "default": 1
+        },
+        "color": {
+          "type": "string"
+        },
+        "apoyos": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "pricing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "moneda": {
+          "type": "string",
+          "default": "USD"
+        },
+        "iva_pct": {
+          "type": "number",
+          "default": 22
+        }
+      }
+    },
+    "tracker_context": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sheet_id": {
+          "type": "string"
+        },
+        "row_number": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    }
+  }
+}
